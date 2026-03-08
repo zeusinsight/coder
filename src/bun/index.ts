@@ -230,6 +230,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 					return { files: [], error: e.message ?? "Failed to get git diff" };
 				}
 			},
+			searchMessages: ({ query }) => store.searchMessages(query),
 			pickDirectory: async () => {
 				const paths = await Utils.openFileDialog({
 					startingFolder: process.env.HOME ?? "/",

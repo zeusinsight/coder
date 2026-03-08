@@ -4,6 +4,7 @@ import { useChat } from "../hooks/use-chat";
 import { Sidebar } from "./sidebar";
 import { ChatView } from "./chat-view";
 import { SettingsModal } from "./settings-modal";
+import { SearchOverlay } from "./search-overlay";
 import { onRpcMessage } from "../rpc-events";
 
 type Props = {
@@ -43,6 +44,7 @@ export function App({ electroview }: Props) {
 	} = useChat(rpc, activeThreadId);
 
 	const [showSettings, setShowSettings] = useState(false);
+	const [showSearch, setShowSearch] = useState(false);
 
 	const handleDeleteThread = useCallback((id: string) => {
 		deleteThread(id);
@@ -69,6 +71,10 @@ export function App({ electroview }: Props) {
 				} else {
 					addProject();
 				}
+			}
+			if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+				e.preventDefault();
+				setShowSearch((s) => !s);
 			}
 		};
 		window.addEventListener("keydown", handler);
@@ -104,6 +110,13 @@ export function App({ electroview }: Props) {
 			/>
 			{showSettings && (
 				<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
+			)}
+			{showSearch && (
+				<SearchOverlay
+					rpc={rpc}
+					onSelect={setActiveThreadId}
+					onClose={() => setShowSearch(false)}
+				/>
 			)}
 		</div>
 	);

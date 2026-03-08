@@ -1,5 +1,6 @@
 import { type RPCSchema } from "electrobun/bun";
 import type { Thread, StreamMessage, PermissionRequest, QueryResult, ContextUsage, AppSettings } from "./types";
+import type { SearchResult } from "./thread-store";
 
 export type CoderRPC = {
 	bun: RPCSchema<{
@@ -21,6 +22,7 @@ export type CoderRPC = {
 			updateSettings: { params: AppSettings; response: AppSettings };
 			generateCommitMessage: { params: { cwd: string }; response: { message: string; error?: string } };
 			commitAndPush: { params: { cwd: string; message: string }; response: { success: boolean; error?: string } };
+			searchMessages: { params: { query: string }; response: SearchResult[] };
 		};
 		messages: {
 			sendMessage: { threadId: string; prompt: string | any[]; model?: string; accessMode?: "full" | "restricted"; images?: { mediaType: string; dataUrl: string }[]; thinkingBudget?: number; chatMode?: "chat" | "build" | "plan" };

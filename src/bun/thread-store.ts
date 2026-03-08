@@ -132,6 +132,84 @@ export function loadContextUsage(threadId: string): ContextUsage | null {
 	}
 }
 
+// Search across all thread messages
+export type SearchResult = {
+	threadId: string;
+	threadTitle: string;
+	cwd: string;
+	snippet: string;
+	role: string;
+	matchCount: number;
+};
+
+function extractMessageText(msg: any): string {
+	if (!msg) return "";
+	const content = msg.content;
+	if (typeof content === "string") return content;
+	if (Array.isArray(content)) {
+		return content
+			.filter((b: any) => b?.type === "text" && typeof b.text === "string")
+			.map((b: any) => b.text)
+			.join(" ");
+	}
+	return "";
+}
+
+function makeSnippet(text: string, query: string, maxLen = 140): string {
+	const lower = text.toLowerCase();
+	const idx = lower.indexOf(query.toLowerCase());
+	if (idx === -1) return text.slice(0, maxLen) + (text.length > maxLen ? "…" : "");
+	const start = Math.max(0, idx - 50);
+	const end = Math.min(text.length, idx + query.length + 90);
+	return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+}
+
+export function searchMessages(query: string): SearchResult[] {
+	const q = query.trim();
+	if (!q) return [];
+	const lowerQ = q.toLowerCase();
+	const results: SearchResult[] = [];
+	const threads = ensureStore();
+
+	for (const thread of threads) {
+		let firstSnippet = "";
+		let firstRole = "";
+		let matchCount = 0;
+
+		if (thread.title.toLowerCase().includes(lowerQ)) {
+			matchCount++;
+			firstSnippet = thread.title;
+			firstRole = "title";
+		}
+
+		const messages = loadMessages(thread.id);
+		for (const msg of messages) {
+			const text = extractMessageText(msg);
+			if (!text) continue;
+			if (text.toLowerCase().includes(lowerQ)) {
+				matchCount++;
+				if (!firstSnippet) {
+					firstSnippet = makeSnippet(text, q);
+					firstRole = msg.role ?? "unknown";
+				}
+			}
+		}
+
+		if (matchCount > 0) {
+			results.push({
+				threadId: thread.id,
+				threadTitle: thread.title,
+				cwd: thread.cwd,
+				snippet: firstSnippet,
+				role: firstRole,
+				matchCount,
+			});
+		}
+	}
+
+	return results;
+}
+
 // Global app settings persistence
 let cachedSettings: AppSettings | null = null;
 

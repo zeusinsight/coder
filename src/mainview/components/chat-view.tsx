@@ -682,18 +682,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 				</div>
 				<div className="flex items-center gap-2 ml-4 flex-shrink-0" onMouseDown={(e) => e.stopPropagation()}>
 					{contextUsage && <ContextBar usage={contextUsage} />}
-					{isStreaming && (
-						<button
-							onClick={onInterrupt}
-							className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 bg-red-600/10 rounded-md hover:bg-red-600/20 transition-colors border border-red-600/20"
-						>
-							<svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
-								<rect x="2" y="2" width="8" height="8" rx="1" />
-							</svg>
-							Stop
-						</button>
-					)}
-					<div className="relative">
+						<div className="relative">
 						<button
 							onClick={() => setCommitPopoverOpen(!commitPopoverOpen)}
 							className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer border ${

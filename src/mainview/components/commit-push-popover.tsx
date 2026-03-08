@@ -111,9 +111,8 @@ export function CommitPushPopover({ rpc, cwd, onClose }: Props) {
 						<span className="text-[13px] text-[#888]">Generating commit message...</span>
 					</div>
 				) : (
-					<input
-						ref={inputRef}
-						type="text"
+					<textarea
+						ref={inputRef as any}
 						value={message}
 						onChange={(e) => setMessage(e.target.value)}
 						onKeyDown={(e) => {
@@ -124,7 +123,8 @@ export function CommitPushPopover({ rpc, cwd, onClose }: Props) {
 						}}
 						placeholder="Commit message..."
 						disabled={pushing || success}
-						className="w-full bg-[#232428] border border-[#333] rounded-md px-3 py-2 text-[13px] text-white placeholder-[#555] outline-none focus:border-[#555] transition-colors mb-3 disabled:opacity-50"
+						rows={4}
+						className="w-full bg-[#232428] border border-[#333] rounded-md px-3 py-2 text-[13px] text-white placeholder-[#555] outline-none focus:border-[#555] transition-colors mb-3 disabled:opacity-50 resize-none"
 						style={{ fontFamily: "'Geist Mono', monospace" }}
 					/>
 				)}

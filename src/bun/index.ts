@@ -113,11 +113,16 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			updateSettings: (settings) => store.saveSettings(settings),
 			generateCommitMessage: async ({ cwd }) => {
 				try {
+					const { execSync } = await import("child_process");
+					// Skip if working tree is clean
+					const status = execSync("git status --porcelain", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
+					if (!status) {
+						return { message: "", error: "No changes to commit" };
+					}
 					const installed = await ensureLzc();
 					if (!installed) {
 						return { message: "", error: "Failed to install lazycommit. Run 'npm install -g lazycommitt' manually." };
 					}
-					const { execSync } = await import("child_process");
 					const settings = store.loadSettings();
 					const env = { ...userShellEnv };
 					if (settings.groqApiKey) env.GROQ_API_KEY = settings.groqApiKey;

@@ -253,7 +253,7 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 	}, [playDing]);
 
 	const sendMessage = useCallback(
-		(prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[]) => {
+		(prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number) => {
 			if (!rpc || !activeThreadId) return;
 			const textContent = typeof prompt === "string" ? prompt : prompt.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 			if (!textContent.trim() && (!images || images.length === 0)) return;
@@ -269,7 +269,7 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 				]);
 			});
 
-			rpc.send.sendMessage({ threadId: activeThreadId, prompt, model, accessMode, images });
+			rpc.send.sendMessage({ threadId: activeThreadId, prompt, model, accessMode, images, thinkingBudget });
 		},
 		[rpc, activeThreadId]
 	);

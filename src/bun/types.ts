@@ -7,6 +7,7 @@ export type Thread = {
 	harness?: string;
 	model?: string;
 	accessMode?: "full" | "restricted";
+	thinkingLevel?: "low" | "medium" | "high";
 	createdAt: string;
 	updatedAt: string;
 };

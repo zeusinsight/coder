@@ -67,7 +67,7 @@ function extractToolUseFromMessage(msg: SDKMessage): { id: string; name: string;
 	return null;
 }
 
-function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted"): Record<string, unknown> {
+function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", thinkingBudget?: number): Record<string, unknown> {
 	const cleanEnv: Record<string, string> = {};
 	for (const [k, v] of Object.entries(process.env)) {
 		if (!k.startsWith("CLAUDE") && v !== undefined) cleanEnv[k] = v;
@@ -104,6 +104,10 @@ function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string
 
 	if (model) {
 		opts.model = model;
+	}
+
+	if (thinkingBudget) {
+		opts.thinkingBudget = thinkingBudget;
 	}
 
 	return opts;
@@ -253,7 +257,7 @@ function extractTextFromPrompt(prompt: string | any[]): string {
 	return prompt.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 }
 
-export async function startQuery(threadId: string, prompt: string | any[], cwd: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", images?: { mediaType: string; dataUrl: string }[]) {
+export async function startQuery(threadId: string, prompt: string | any[], cwd: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", images?: { mediaType: string; dataUrl: string }[], thinkingBudget?: number) {
 	closeQuery(threadId);
 
 	// Save the user's message immediately
@@ -265,7 +269,7 @@ export async function startQuery(threadId: string, prompt: string | any[], cwd: 
 	}
 
 	try {
-		const opts = buildClaudeOpts(cwd, threadId, resumeSessionId, model, accessMode);
+		const opts = buildClaudeOpts(cwd, threadId, resumeSessionId, model, accessMode, thinkingBudget);
 		await runQuery(threadId, prompt, opts);
 
 		// Auto-title from first prompt
@@ -280,7 +284,7 @@ export async function startQuery(threadId: string, prompt: string | any[], cwd: 
 		if (resumeSessionId) {
 			console.error("[bridge] Resume failed, retrying fresh:", err.message);
 			try {
-				const opts = buildClaudeOpts(cwd, threadId, undefined, model, accessMode);
+				const opts = buildClaudeOpts(cwd, threadId, undefined, model, accessMode, thinkingBudget);
 				await runQuery(threadId, prompt, opts);
 			} catch (retryErr: any) {
 				console.error("[bridge] Retry error:", retryErr.message);

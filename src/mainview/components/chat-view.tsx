@@ -3,6 +3,9 @@ import { Message } from "./message";
 import type { ChatMessage, ImageAttachment } from "../hooks/use-chat";
 import type { Thread, PermissionRequest } from "../../bun/types";
 import { DiffView } from "./diff-view";
+import { useFileMention } from "../hooks/use-file-mention";
+import { FileMentionPopup } from "./file-mention-popup";
+import { GitDiffSidebar } from "./git-diff-sidebar";
 
 function ThinkingShimmer() {
 	const text = "Thinking";
@@ -53,10 +56,95 @@ const HARNESSES = [
 ];
 
 const CLAUDE_MODELS = [
-	{ id: "claude-opus-4-6", label: "Claude Opus 4.6" },
-	{ id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-	{ id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+	{ id: "claude-opus-4-6", label: "Claude Opus 4.6", hasThinking: true },
+	{ id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hasThinking: true },
+	{ id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", hasThinking: false },
 ];
+
+type ThinkingLevel = "low" | "medium" | "high";
+
+const THINKING_LEVELS: { id: ThinkingLevel; label: string; budget: number }[] = [
+	{ id: "low", label: "Low", budget: 5000 },
+	{ id: "medium", label: "Medium", budget: 20000 },
+	{ id: "high", label: "High", budget: 80000 },
+];
+
+function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selectedModel: string; thinkingLevel: ThinkingLevel; onSelect: (level: ThinkingLevel) => void }) {
+	const [open, setOpen] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		const handler = (e: MouseEvent) => {
+			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+		};
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
+	}, [open]);
+
+	const model = CLAUDE_MODELS.find((m) => m.id === selectedModel);
+	const hasThinking = model?.hasThinking ?? false;
+
+	if (!hasThinking) {
+		return (
+			<span className="flex items-center gap-1.5 text-[#666] cursor-default">
+				<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+					<circle cx="8" cy="8" r="6" />
+					<path d="M8 5v3" />
+					<circle cx="8" cy="11" r="0.5" fill="currentColor" />
+				</svg>
+				Normal
+			</span>
+		);
+	}
+
+	const current = THINKING_LEVELS.find((l) => l.id === thinkingLevel)!;
+	const levelColor = thinkingLevel === "low" ? "text-blue-400" : thinkingLevel === "medium" ? "text-violet-400" : "text-amber-400";
+
+	return (
+		<div className="relative" ref={ref}>
+			<button
+				onClick={() => setOpen(!open)}
+				className={`flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer ${levelColor}`}
+			>
+				<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+					<path d="M8 1C5.2 1 3 3.2 3 6c0 1.9 1 3.4 2.5 4.3V12h5v-1.7C12 9.4 13 7.9 13 6c0-2.8-2.2-5-5-5z" />
+					<path d="M6 14h4" />
+					<path d="M7 12v2M9 12v2" />
+				</svg>
+				{current.label}
+				<svg className={`w-3 h-3 text-[#666] transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+					<path d="M3 5l3 3 3-3" />
+				</svg>
+			</button>
+
+			{open && (
+				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
+					{THINKING_LEVELS.map((level) => {
+						const color = level.id === "low" ? "text-blue-400" : level.id === "medium" ? "text-violet-400" : "text-amber-400";
+						return (
+							<button
+								key={level.id}
+								onClick={() => { onSelect(level.id); setOpen(false); }}
+								className={`w-full flex items-center gap-3 px-3 py-2.5 text-[13px] transition-colors cursor-pointer ${
+									thinkingLevel === level.id ? "bg-[#2a2b2e] text-white" : "text-[#999] hover:bg-[#1e1e1e] hover:text-white"
+								}`}
+							>
+								<span className={`flex-shrink-0 ${color}`}>{level.label}</span>
+								<span className="text-[11px] text-[#666] font-mono flex-shrink-0">{(level.budget / 1000).toFixed(0)}k tokens</span>
+								{thinkingLevel === level.id && (
+									<svg className="w-3.5 h-3.5 text-[#888] ml-auto flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M13 4L6 11L3 8" />
+									</svg>
+								)}
+							</button>
+						);
+					})}
+				</div>
+			)}
+		</div>
+	);
+}
 
 function HarnessDropdown({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
 	const [open, setOpen] = useState(false);
@@ -173,7 +261,7 @@ type Props = {
 	thread: Thread | null;
 	messages: ChatMessage[];
 	isStreaming: boolean;
-	onSend: (prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[]) => void;
+	onSend: (prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number) => void;
 	onRetry: (messageId: string) => void;
 	onInterrupt: () => void;
 	permissionRequest: PermissionRequest | null;
@@ -183,16 +271,22 @@ type Props = {
 
 export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, onInterrupt, permissionRequest, onResolvePermission, onThreadUpdated }: Props) {
 	const [input, setInput] = useState("");
+	const [cursorPos, setCursorPos] = useState(0);
 	const [selectedHarness, setSelectedHarness] = useState("claude");
 	const [selectedModel, setSelectedModel] = useState("claude-opus-4-6");
+	const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
 	const [accessMode, setAccessMode] = useState<"full" | "restricted">("full");
 	const [images, setImages] = useState<(ImageAttachment & { id: string; base64: string })[]>([]);
+	const [gitDiffOpen, setGitDiffOpen] = useState(false);
 	const [userScrolledUp, setUserScrolledUp] = useState(false);
 	const userScrolledUpRef = useRef(false);
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	// @ file mention autocomplete
+	const fileMention = useFileMention(rpc, thread?.cwd, input, cursorPos);
 
 	// Sync settings from thread when switching
 	const prevSyncThreadId = useRef<string | null>(null);
@@ -201,29 +295,34 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 		prevSyncThreadId.current = thread.id;
 		setSelectedHarness(thread.harness ?? "claude");
 		setSelectedModel(thread.model ?? "claude-opus-4-6");
+		setThinkingLevel(thread.thinkingLevel ?? "medium");
 		setAccessMode(thread.accessMode ?? "full");
 	}, [thread]);
 
 	// Persist settings on change
-	const saveSettings = (harness: string, model: string, mode: "full" | "restricted") => {
+	const saveSettings = (harness: string, model: string, mode: "full" | "restricted", thinking: ThinkingLevel) => {
 		if (!rpc || !thread) return;
-		rpc.request.updateThreadSettings({ id: thread.id, harness, model, accessMode: mode })
+		rpc.request.updateThreadSettings({ id: thread.id, harness, model, accessMode: mode, thinkingLevel: thinking })
 			.then((updated: Thread) => onThreadUpdated(updated))
 			.catch(() => {});
 	};
 
 	const changeHarness = (id: string) => {
 		setSelectedHarness(id);
-		saveSettings(id, selectedModel, accessMode);
+		saveSettings(id, selectedModel, accessMode, thinkingLevel);
 	};
 	const changeModel = (id: string) => {
 		setSelectedModel(id);
-		saveSettings(selectedHarness, id, accessMode);
+		saveSettings(selectedHarness, id, accessMode, thinkingLevel);
+	};
+	const changeThinkingLevel = (level: ThinkingLevel) => {
+		setThinkingLevel(level);
+		saveSettings(selectedHarness, selectedModel, accessMode, level);
 	};
 	const changeAccessMode = () => {
 		const next = accessMode === "full" ? "restricted" : "full";
 		setAccessMode(next);
-		saveSettings(selectedHarness, selectedModel, next);
+		saveSettings(selectedHarness, selectedModel, next, thinkingLevel);
 	};
 
 	const handleScroll = useCallback(() => {
@@ -307,6 +406,8 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 	const handleSend = () => {
 		if ((!input.trim() && images.length === 0) || isStreaming) return;
 		const model = selectedHarness === "claude" ? selectedModel : undefined;
+		const modelDef = CLAUDE_MODELS.find((m) => m.id === selectedModel);
+		const budget = modelDef?.hasThinking ? THINKING_LEVELS.find((l) => l.id === thinkingLevel)?.budget : undefined;
 		if (images.length > 0) {
 			const contentBlocks: any[] = [];
 			for (const img of images) {
@@ -316,9 +417,9 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 				contentBlocks.push({ type: "text", text: input.trim() });
 			}
 			const imageAttachments = images.map((img) => ({ mediaType: img.mediaType, dataUrl: img.dataUrl }));
-			onSend(contentBlocks, model, accessMode, imageAttachments);
+			onSend(contentBlocks, model, accessMode, imageAttachments, budget);
 		} else {
-			onSend(input.trim(), model, accessMode);
+			onSend(input.trim(), model, accessMode, undefined, budget);
 		}
 		setInput("");
 		setImages([]);
@@ -327,7 +428,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 	if (!thread) {
 		return (
 			<div className="flex-1 flex flex-col bg-[#181818]">
-				<div className="h-[52px] flex-shrink-0" />
+				<div className="h-[52px] flex-shrink-0 electrobun-webkit-app-region-drag" />
 				<div className="flex-1 flex items-center justify-center text-[#444]">
 					<div className="text-5xl mb-4 font-mono font-bold">{"</>"}</div>
 					<div className="text-lg font-semibold text-[#555]">Coder</div>
@@ -341,9 +442,9 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 	const groupedMessages = groupToolMessages(messages);
 
 	return (
-		<div className="flex-1 flex flex-col min-w-0 bg-[#181818] chat-grain">
+		<div className="flex-1 flex flex-col min-w-0 bg-[#181818] chat-grain relative">
 			{/* Top Bar */}
-			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e]">
+			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e] electrobun-webkit-app-region-drag">
 				<div className="flex items-center gap-3 min-w-0">
 					<span className="text-[#e0e0e0] text-sm font-medium truncate max-w-[400px]">
 						{thread.title}
@@ -352,7 +453,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 						{getProjectName(thread.cwd)}
 					</span>
 				</div>
-				<div className="flex items-center gap-2 ml-4 flex-shrink-0 relative z-[10000]">
+				<div className="flex items-center gap-2 ml-4 flex-shrink-0" onMouseDown={(e) => e.stopPropagation()}>
 					{isStreaming && (
 						<button
 							onClick={onInterrupt}
@@ -364,6 +465,22 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 							Stop
 						</button>
 					)}
+					<button
+						onClick={() => setGitDiffOpen(!gitDiffOpen)}
+						className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer border ${
+							gitDiffOpen
+								? "text-violet-400 bg-violet-600/10 border-violet-600/20 hover:bg-violet-600/20"
+								: "text-[#999] bg-transparent border-[#2a2b2e] hover:text-white hover:bg-[#2a2b2e]"
+						}`}
+						title="Git changes"
+					>
+						<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+							<path d="M12 2v6M12 12v2M4 2v2M4 8v6" />
+							<circle cx="4" cy="6" r="2" />
+							<circle cx="12" cy="10" r="2" />
+						</svg>
+						Diff
+					</button>
 				</div>
 			</div>
 
@@ -440,13 +557,45 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 						onDragOver={(e) => e.preventDefault()}
 					>
 						{/* Text input */}
-						<div className="px-5 pt-4 pb-2">
+						<div className="px-5 pt-4 pb-2 relative">
+							{fileMention.isOpen && (
+								<FileMentionPopup
+									items={fileMention.items}
+									selectedIndex={fileMention.selectedIndex}
+									onSelect={(entry) => {
+										const result = fileMention.applySelection(entry);
+										if (result) {
+											setInput(result.newInput);
+											setCursorPos(result.newCursorPos);
+											requestAnimationFrame(() => {
+												textareaRef.current?.setSelectionRange(result.newCursorPos, result.newCursorPos);
+												textareaRef.current?.focus();
+											});
+										}
+									}}
+								/>
+							)}
 							<textarea
 								ref={textareaRef}
 								value={input}
-								onChange={(e) => setInput(e.target.value)}
+								onChange={(e) => {
+									setInput(e.target.value);
+									setCursorPos(e.target.selectionStart ?? 0);
+								}}
+								onSelect={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
 								onPaste={handlePaste}
 								onKeyDown={(e) => {
+									const mentionResult = fileMention.handleKeyDown(e);
+									if (mentionResult && typeof mentionResult === "object") {
+										setInput(mentionResult.newInput);
+										setCursorPos(mentionResult.newCursorPos);
+										requestAnimationFrame(() => {
+											textareaRef.current?.setSelectionRange(mentionResult.newCursorPos, mentionResult.newCursorPos);
+										});
+										return;
+									}
+									if (mentionResult === true) return;
+
 									if (e.key === "Enter" && !e.shiftKey) {
 										e.preventDefault();
 										handleSend();
@@ -511,7 +660,10 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 								</button>
 								<HarnessDropdown selected={selectedHarness} onSelect={changeHarness} />
 								{selectedHarness === "claude" && (
-									<ModelSelector selectedModel={selectedModel} onSelect={changeModel} />
+									<>
+										<ModelSelector selectedModel={selectedModel} onSelect={changeModel} />
+										<ThinkingSelector selectedModel={selectedModel} thinkingLevel={thinkingLevel} onSelect={changeThinkingLevel} />
+									</>
 								)}
 								<button
 									onClick={changeAccessMode}
@@ -556,6 +708,12 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 				</div>
 			</div>
 
+			<GitDiffSidebar
+				rpc={rpc}
+				cwd={thread.cwd}
+				isOpen={gitDiffOpen}
+				onClose={() => setGitDiffOpen(false)}
+			/>
 		</div>
 	);
 }

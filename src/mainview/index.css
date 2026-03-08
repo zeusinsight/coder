@@ -9,6 +9,7 @@
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
+	cursor: inherit;
 }
 
 html, body, #root {
@@ -21,9 +22,22 @@ body {
 	-webkit-font-smoothing: antialiased;
 	background: #181818;
 	color: #c9ccd1;
+	cursor: default;
 }
 
-/* Drag handled by #drag-overlay in index.html (outside React) */
+/* Restore native cursor behavior for interactive & text elements */
+a, button, select, label, summary, [role="button"] {
+	cursor: pointer;
+}
+input, textarea, [contenteditable="true"] {
+	cursor: text;
+}
+a[href] {
+	cursor: pointer;
+}
+
+/* Window drag regions — handled by Electrobun's .electrobun-webkit-app-region-drag class.
+   Buttons inside drag regions use onMouseDown stopPropagation to stay clickable. */
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {

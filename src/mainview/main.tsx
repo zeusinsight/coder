@@ -22,6 +22,15 @@ const rpc = Electroview.defineRPC<CoderRPC>({
 
 const electroview = new Electroview({ rpc });
 
+// Intercept all link clicks and open them in the default browser
+document.addEventListener("click", (e) => {
+	const anchor = (e.target as HTMLElement).closest("a");
+	if (anchor && anchor.href && anchor.href.startsWith("http")) {
+		e.preventDefault();
+		rpc.send.openExternal({ url: anchor.href });
+	}
+});
+
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
 		<App electroview={electroview as any} />

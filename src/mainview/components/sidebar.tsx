@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import type { Thread } from "../../bun/types";
 import type { ThreadStatus } from "../hooks/use-chat";
 
@@ -65,6 +65,7 @@ type Props = {
 	onDelete: (id: string) => void;
 	onRename: (id: string, title: string) => void;
 	onPin: (id: string, pinned: boolean) => void;
+	onOpenSettings: () => void;
 };
 
 function getProjectName(cwd: string) {
@@ -72,7 +73,137 @@ function getProjectName(cwd: string) {
 	return parts[parts.length - 1] || cwd;
 }
 
-export function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin }: Props) {
+const ThreadItem = memo(function ThreadItem({
+	thread,
+	isActive,
+	status,
+	editingId,
+	editTitle,
+	onSelect,
+	onStartRename,
+	onCommitRename,
+	onSetEditingId,
+	onSetEditTitle,
+	onPin,
+	onDelete,
+}: {
+	thread: Thread;
+	isActive: boolean;
+	status: ThreadStatus;
+	editingId: string | null;
+	editTitle: string;
+	onSelect: (id: string) => void;
+	onStartRename: (thread: Thread, e: React.MouseEvent) => void;
+	onCommitRename: () => void;
+	onSetEditingId: (id: string | null) => void;
+	onSetEditTitle: (title: string) => void;
+	onPin: (id: string, pinned: boolean) => void;
+	onDelete: (thread: Thread) => void;
+}) {
+	return (
+		<div
+			className={`group/thread flex items-center px-3 h-[32px] cursor-pointer ${
+				isActive ? "bg-[#2a2b2e]" : "hover:bg-[#252525]"
+			}`}
+			onClick={() => onSelect(thread.id)}
+		>
+			{/* Pin indicator */}
+			{thread.pinned && (
+				<svg className="w-3 h-3 text-[#666] flex-shrink-0 mr-1.5" viewBox="0 0 16 16" fill="currentColor">
+					<path d="M9.828 1.282a1 1 0 0 1 1.414 0l3.476 3.476a1 1 0 0 1 0 1.414L13.1 7.79l-.353 2.122a1 1 0 0 1-.293.572L10.2 12.74a.5.5 0 0 1-.765-.052L7 9.3 3.854 12.446a.5.5 0 0 1-.708-.708L6.3 8.6 2.912 6.165a.5.5 0 0 1-.052-.765l2.256-2.254a1 1 0 0 1 .572-.293L7.81 2.5l1.618-1.618z" />
+				</svg>
+			)}
+			{/* Status dot + label */}
+			{status === "completed" && (
+				<>
+					<span className="w-[7px] h-[7px] rounded-full bg-emerald-500 flex-shrink-0 mr-1.5" />
+					<span className="text-emerald-400 text-[13px] mr-1.5 flex-shrink-0" style={{ fontFamily: "'Geist Mono', monospace" }}>
+						Completed
+					</span>
+				</>
+			)}
+			{(status === "working" || status === "pending_approval") && (
+				<>
+					{status === "pending_approval" && (
+						<svg className="w-3 h-3 text-amber-500 flex-shrink-0 mr-1" viewBox="0 0 16 16" fill="currentColor">
+							<path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 1.855-.606 3.26-1.2 4.2a8.5 8.5 0 01-.459.632l-.006.008A.5.5 0 002.2 11.5h11.6a.5.5 0 00.365-.66l-.006-.008a8.5 8.5 0 01-.46-.632c-.593-.94-1.199-2.345-1.199-4.2A4.5 4.5 0 008 1.5zM6.5 13a1.5 1.5 0 003 0h-3z" />
+						</svg>
+					)}
+					<span className="w-[7px] h-[7px] rounded-full bg-amber-500 flex-shrink-0 mr-1.5" />
+					<span className="text-amber-400 text-[13px] mr-1.5 flex-shrink-0" style={{ fontFamily: "'Geist Mono', monospace" }}>
+						Working
+					</span>
+				</>
+			)}
+
+			{/* Thread title */}
+			{editingId === thread.id ? (
+				<input
+					autoFocus
+					value={editTitle}
+					onChange={(e) => onSetEditTitle(e.target.value)}
+					onBlur={onCommitRename}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") onCommitRename();
+						if (e.key === "Escape") onSetEditingId(null);
+					}}
+					className="flex-1 bg-[#333] text-white text-[13px] px-1.5 py-0.5 outline-none border border-[#555]"
+					style={{ fontFamily: "'Geist Mono', monospace" }}
+					onClick={(e) => e.stopPropagation()}
+				/>
+			) : (
+				<span
+					className="text-[13px] text-[#ccc] truncate flex-1 min-w-0"
+					style={{ fontFamily: "'Geist Mono', monospace" }}
+				>
+					{thread.title}
+				</span>
+			)}
+
+			{/* Timestamp + hover actions in fixed-width slot */}
+			<div className="w-[60px] flex-shrink-0 ml-1 flex items-center justify-end">
+				<span className="text-[#555] text-[11px] whitespace-nowrap group-hover/thread:hidden" style={{ fontFamily: "'Geist', sans-serif" }}>
+					{formatTime(thread.updatedAt)}
+				</span>
+				{editingId !== thread.id && (
+					<div className="hidden group-hover/thread:flex gap-1">
+					<button
+						onClick={(e) => {
+							e.stopPropagation();
+							onPin(thread.id, !thread.pinned);
+						}}
+						className={`w-5 h-5 flex items-center justify-center hover:bg-[#333] rounded transition-colors ${thread.pinned ? "text-[#aaa]" : "text-[#555] hover:text-[#aaa]"}`}
+						title={thread.pinned ? "Unpin" : "Pin"}
+					>
+						<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+							<path d="M9.828 1.282a1 1 0 0 1 1.414 0l3.476 3.476a1 1 0 0 1 0 1.414L13.1 7.79l-.353 2.122a1 1 0 0 1-.293.572L10.2 12.74a.5.5 0 0 1-.765-.052L7 9.3 3.854 12.446a.5.5 0 0 1-.708-.708L6.3 8.6 2.912 6.165a.5.5 0 0 1-.052-.765l2.256-2.254a1 1 0 0 1 .572-.293L7.81 2.5l1.618-1.618z" />
+						</svg>
+					</button>
+					<button
+						onClick={(e) => onStartRename(thread, e)}
+						className="w-5 h-5 flex items-center justify-center text-[#555] hover:text-[#aaa] hover:bg-[#333] rounded text-[12px] transition-colors"
+						title="Rename"
+					>
+						&#9998;
+					</button>
+					<button
+						onClick={(e) => {
+							e.stopPropagation();
+							onDelete(thread);
+						}}
+						className="w-5 h-5 flex items-center justify-center text-[#555] hover:text-red-400 hover:bg-[#333] rounded text-[12px] transition-colors"
+						title="Delete"
+					>
+						&#10005;
+					</button>
+				</div>
+			)}
+			</div>
+		</div>
+	);
+});
+
+export const Sidebar = memo(function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin, onOpenSettings }: Props) {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -187,113 +318,23 @@ export function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, on
 							{/* Thread list */}
 							{!isCollapsed && project.threads.length > 0 && (
 								<div className="mt-1 ml-[15px] border-l border-[#333]">
-									{project.threads.map((thread) => {
-										const status = getThreadStatus(thread.id);
-										const isActive = activeThreadId === thread.id;
-
-										return (
-											<div
-												key={thread.id}
-												className={`group/thread flex items-center px-3 h-[32px] cursor-pointer ${
-													isActive ? "bg-[#2a2b2e]" : "hover:bg-[#252525]"
-												}`}
-												onClick={() => onSelect(thread.id)}
-											>
-												{/* Pin indicator */}
-												{thread.pinned && (
-													<svg className="w-3 h-3 text-[#666] flex-shrink-0 mr-1.5" viewBox="0 0 16 16" fill="currentColor">
-														<path d="M9.828 1.282a1 1 0 0 1 1.414 0l3.476 3.476a1 1 0 0 1 0 1.414L13.1 7.79l-.353 2.122a1 1 0 0 1-.293.572L10.2 12.74a.5.5 0 0 1-.765-.052L7 9.3 3.854 12.446a.5.5 0 0 1-.708-.708L6.3 8.6 2.912 6.165a.5.5 0 0 1-.052-.765l2.256-2.254a1 1 0 0 1 .572-.293L7.81 2.5l1.618-1.618z" />
-													</svg>
-												)}
-												{/* Status dot + label */}
-												{status === "completed" && (
-													<>
-														<span className="w-[7px] h-[7px] rounded-full bg-emerald-500 flex-shrink-0 mr-1.5" />
-														<span className="text-emerald-400 text-[13px] mr-1.5 flex-shrink-0" style={{ fontFamily: "'Geist Mono', monospace" }}>
-															Completed
-														</span>
-													</>
-												)}
-												{(status === "working" || status === "pending_approval") && (
-													<>
-														{status === "pending_approval" && (
-															<svg className="w-3 h-3 text-amber-500 flex-shrink-0 mr-1" viewBox="0 0 16 16" fill="currentColor">
-																<path d="M8 1.5a4.5 4.5 0 00-4.5 4.5c0 1.855-.606 3.26-1.2 4.2a8.5 8.5 0 01-.459.632l-.006.008A.5.5 0 002.2 11.5h11.6a.5.5 0 00.365-.66l-.006-.008a8.5 8.5 0 01-.46-.632c-.593-.94-1.199-2.345-1.199-4.2A4.5 4.5 0 008 1.5zM6.5 13a1.5 1.5 0 003 0h-3z" />
-															</svg>
-														)}
-														<span className="w-[7px] h-[7px] rounded-full bg-amber-500 flex-shrink-0 mr-1.5" />
-														<span className="text-amber-400 text-[13px] mr-1.5 flex-shrink-0" style={{ fontFamily: "'Geist Mono', monospace" }}>
-															Working
-														</span>
-													</>
-												)}
-
-												{/* Thread title */}
-												{editingId === thread.id ? (
-													<input
-														autoFocus
-														value={editTitle}
-														onChange={(e) => setEditTitle(e.target.value)}
-														onBlur={commitRename}
-														onKeyDown={(e) => {
-															if (e.key === "Enter") commitRename();
-															if (e.key === "Escape") setEditingId(null);
-														}}
-														className="flex-1 bg-[#333] text-white text-[13px] px-1.5 py-0.5 outline-none border border-[#555]"
-														style={{ fontFamily: "'Geist Mono', monospace" }}
-														onClick={(e) => e.stopPropagation()}
-													/>
-												) : (
-													<span
-														className="text-[13px] text-[#ccc] truncate flex-1 min-w-0"
-														style={{ fontFamily: "'Geist Mono', monospace" }}
-													>
-														{thread.title}
-													</span>
-												)}
-
-												{/* Timestamp + hover actions in fixed-width slot */}
-												<div className="w-[60px] flex-shrink-0 ml-1 flex items-center justify-end">
-													<span className="text-[#555] text-[11px] whitespace-nowrap group-hover/thread:hidden" style={{ fontFamily: "'Geist', sans-serif" }}>
-														{formatTime(thread.updatedAt)}
-													</span>
-													{editingId !== thread.id && (
-														<div className="hidden group-hover/thread:flex gap-1">
-														<button
-															onClick={(e) => {
-																e.stopPropagation();
-																onPin(thread.id, !thread.pinned);
-															}}
-															className={`w-5 h-5 flex items-center justify-center hover:bg-[#333] rounded transition-colors ${thread.pinned ? "text-[#aaa]" : "text-[#555] hover:text-[#aaa]"}`}
-															title={thread.pinned ? "Unpin" : "Pin"}
-														>
-															<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-																<path d="M9.828 1.282a1 1 0 0 1 1.414 0l3.476 3.476a1 1 0 0 1 0 1.414L13.1 7.79l-.353 2.122a1 1 0 0 1-.293.572L10.2 12.74a.5.5 0 0 1-.765-.052L7 9.3 3.854 12.446a.5.5 0 0 1-.708-.708L6.3 8.6 2.912 6.165a.5.5 0 0 1-.052-.765l2.256-2.254a1 1 0 0 1 .572-.293L7.81 2.5l1.618-1.618z" />
-															</svg>
-														</button>
-														<button
-															onClick={(e) => startRename(thread, e)}
-															className="w-5 h-5 flex items-center justify-center text-[#555] hover:text-[#aaa] hover:bg-[#333] rounded text-[12px] transition-colors"
-															title="Rename"
-														>
-															&#9998;
-														</button>
-														<button
-															onClick={(e) => {
-																e.stopPropagation();
-																setDeletingThread(thread);
-															}}
-															className="w-5 h-5 flex items-center justify-center text-[#555] hover:text-red-400 hover:bg-[#333] rounded text-[12px] transition-colors"
-															title="Delete"
-														>
-															&#10005;
-														</button>
-													</div>
-												)}
-												</div>
-											</div>
-										);
-									})}
+									{project.threads.map((thread) => (
+									<ThreadItem
+										key={thread.id}
+										thread={thread}
+										isActive={activeThreadId === thread.id}
+										status={getThreadStatus(thread.id)}
+										editingId={editingId}
+										editTitle={editTitle}
+										onSelect={onSelect}
+										onStartRename={startRename}
+										onCommitRename={commitRename}
+										onSetEditingId={setEditingId}
+										onSetEditTitle={setEditTitle}
+										onPin={onPin}
+										onDelete={setDeletingThread}
+									/>
+								))}
 								</div>
 							)}
 						</div>
@@ -306,8 +347,17 @@ export function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, on
 				)}
 			</div>
 
-			{/* Add project */}
-			<div className="px-4 py-4 border-t border-[#2a2b2e] flex justify-center">
+			{/* Add project + Settings */}
+			<div className="px-4 py-4 border-t border-[#2a2b2e] flex items-center justify-between">
+				<button
+					onClick={onOpenSettings}
+					className="w-7 h-7 flex items-center justify-center text-[#555] hover:text-white hover:bg-[#2a2a2a] rounded transition-colors cursor-pointer"
+					title="Settings"
+				>
+					<svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+						<path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+					</svg>
+				</button>
 				<button
 					onClick={onAddProject}
 					className="text-[#888] text-[13px] tracking-[0.15em] uppercase hover:text-white cursor-pointer transition-colors"
@@ -315,6 +365,8 @@ export function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, on
 				>
 					+ &nbsp;Add Project
 				</button>
+				{/* Spacer to keep Add Project centered */}
+				<div className="w-7" />
 			</div>
 
 			{deletingThread && (
@@ -326,7 +378,7 @@ export function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, on
 			)}
 		</div>
 	);
-}
+});
 
 function formatTime(dateStr: string) {
 	const date = new Date(dateStr);

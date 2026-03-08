@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Thread } from "../../bun/types";
 
 export function useThreads(rpc: any) {
@@ -88,7 +88,7 @@ export function useThreads(rpc: any) {
 		});
 	}, []);
 
-	const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
+	const activeThread = useMemo(() => threads.find((t) => t.id === activeThreadId) ?? null, [threads, activeThreadId]);
 
 	return {
 		threads,

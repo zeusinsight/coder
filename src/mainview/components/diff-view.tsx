@@ -1,12 +1,14 @@
+import { memo, useMemo } from "react";
+
 type Props = {
 	filePath: string;
 	oldStr: string;
 	newStr: string;
 };
 
-export function DiffView({ filePath, oldStr, newStr }: Props) {
-	const oldLines = oldStr.split("\n");
-	const newLines = newStr.split("\n");
+export const DiffView = memo(function DiffView({ filePath, oldStr, newStr }: Props) {
+	const oldLines = useMemo(() => oldStr.split("\n"), [oldStr]);
+	const newLines = useMemo(() => newStr.split("\n"), [newStr]);
 
 	return (
 		<div className="rounded-lg border border-[#2a2b2e] bg-[#1b1b1b] font-mono text-[13px] overflow-hidden my-2">
@@ -27,4 +29,4 @@ export function DiffView({ filePath, oldStr, newStr }: Props) {
 			</div>
 		</div>
 	);
-}
+});

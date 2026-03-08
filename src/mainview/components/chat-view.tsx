@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { Message } from "./message";
 import type { ChatMessage, ImageAttachment } from "../hooks/use-chat";
 import type { Thread, PermissionRequest } from "../../bun/types";
@@ -6,6 +6,7 @@ import { DiffView } from "./diff-view";
 import { useFileMention } from "../hooks/use-file-mention";
 import { FileMentionPopup } from "./file-mention-popup";
 import { GitDiffSidebar } from "./git-diff-sidebar";
+import { CommitPushPopover } from "./commit-push-popover";
 
 function ThinkingShimmer() {
 	const text = "Thinking";
@@ -87,7 +88,7 @@ function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selected
 
 	if (!hasThinking) {
 		return (
-			<span className="flex items-center gap-1.5 text-[#666] cursor-default">
+			<span className="flex items-center gap-1.5 cursor-default">
 				<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 					<circle cx="8" cy="8" r="6" />
 					<path d="M8 5v3" />
@@ -99,13 +100,11 @@ function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selected
 	}
 
 	const current = THINKING_LEVELS.find((l) => l.id === thinkingLevel)!;
-	const levelColor = thinkingLevel === "low" ? "text-blue-400" : thinkingLevel === "medium" ? "text-violet-400" : "text-amber-400";
-
 	return (
 		<div className="relative" ref={ref}>
 			<button
 				onClick={() => setOpen(!open)}
-				className={`flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer ${levelColor}`}
+				className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer"
 			>
 				<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 					<path d="M8 1C5.2 1 3 3.2 3 6c0 1.9 1 3.4 2.5 4.3V12h5v-1.7C12 9.4 13 7.9 13 6c0-2.8-2.2-5-5-5z" />
@@ -121,7 +120,6 @@ function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selected
 			{open && (
 				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
 					{THINKING_LEVELS.map((level) => {
-						const color = level.id === "low" ? "text-blue-400" : level.id === "medium" ? "text-violet-400" : "text-amber-400";
 						return (
 							<button
 								key={level.id}
@@ -130,9 +128,97 @@ function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selected
 									thinkingLevel === level.id ? "bg-[#2a2b2e] text-white" : "text-[#999] hover:bg-[#1e1e1e] hover:text-white"
 								}`}
 							>
-								<span className={`flex-shrink-0 ${color}`}>{level.label}</span>
+								<span className="flex-shrink-0">{level.label}</span>
 								<span className="text-[11px] text-[#666] font-mono flex-shrink-0">{(level.budget / 1000).toFixed(0)}k tokens</span>
 								{thinkingLevel === level.id && (
+									<svg className="w-3.5 h-3.5 text-[#888] ml-auto flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M13 4L6 11L3 8" />
+									</svg>
+								)}
+							</button>
+						);
+					})}
+				</div>
+			)}
+		</div>
+	);
+}
+
+type ChatMode = "chat" | "build" | "plan";
+
+const CHAT_MODES: { id: ChatMode; label: string; icon: JSX.Element }[] = [
+	{
+		id: "chat",
+		label: "Chat",
+		icon: (
+			<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+				<path d="M2 3h12v8H4l-2 2V3z" />
+			</svg>
+		),
+	},
+	{
+		id: "build",
+		label: "Build",
+		icon: (
+			<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+				<path d="M9.5 1.5L6 8h4l-3.5 6.5" />
+			</svg>
+		),
+	},
+	{
+		id: "plan",
+		label: "Plan",
+		icon: (
+			<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+				<path d="M4 2v12M4 2l8 4-8 4" />
+			</svg>
+		),
+	},
+];
+
+function ModeSelector({ chatMode, onSelect }: { chatMode: ChatMode; onSelect: (mode: ChatMode) => void }) {
+	const [open, setOpen] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		const handler = (e: MouseEvent) => {
+			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+		};
+		document.addEventListener("mousedown", handler);
+		return () => document.removeEventListener("mousedown", handler);
+	}, [open]);
+
+	const current = CHAT_MODES.find((m) => m.id === chatMode)!;
+
+	return (
+		<div className="relative" ref={ref}>
+			<button
+				onClick={() => setOpen(!open)}
+				className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer"
+			>
+				{current.icon}
+				{current.label}
+				<svg className={`w-3 h-3 text-[#666] transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+					<path d="M3 5l3 3 3-3" />
+				</svg>
+			</button>
+
+			{open && (
+				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
+					{CHAT_MODES.map((mode) => {
+						const desc = mode.id === "chat" ? "General conversation" : mode.id === "build" ? "Write & edit code" : "Plan without coding";
+						return (
+							<button
+								key={mode.id}
+								onClick={() => { onSelect(mode.id); setOpen(false); }}
+								className={`w-full flex items-center gap-3 px-3 py-2.5 text-[13px] transition-colors cursor-pointer ${
+									chatMode === mode.id ? "bg-[#2a2b2e] text-white" : "text-[#999] hover:bg-[#1e1e1e] hover:text-white"
+								}`}
+							>
+								<span className="flex-shrink-0">{mode.label}</span>
+								<span className="text-[11px] text-[#666] flex-shrink-0">{desc}</span>
+								{chatMode === mode.id && (
 									<svg className="w-3.5 h-3.5 text-[#888] ml-auto flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 										<path d="M13 4L6 11L3 8" />
 									</svg>
@@ -256,12 +342,37 @@ function ModelSelector({ selectedModel, onSelect }: { selectedModel: string; onS
 	);
 }
 
+function ContextBar({ usage }: { usage: import("../../bun/types").ContextUsage }) {
+	const total = usage.inputTokens + usage.outputTokens;
+	const pct = Math.min(Math.round((total / usage.contextWindow) * 100), 100);
+	const blocks = 10;
+	const filled = Math.round((pct / 100) * blocks);
+	const bar = "▰".repeat(filled) + "▱".repeat(blocks - filled);
+	const color = pct >= 80 ? "text-red-400" : pct >= 60 ? "text-orange-400" : "text-[#666]";
+	const totalK = (total / 1000).toFixed(0);
+	const windowK = (usage.contextWindow / 1000).toFixed(0);
+
+	return (
+		<span className={`flex items-center gap-1.5 text-[11px] font-mono ${color}`} title={`${totalK}k / ${windowK}k tokens (${pct}%)`}>
+			<span className="tracking-tight">{bar}</span>
+			<span>{pct}%</span>
+		</span>
+	);
+}
+
+// Stable wrapper to avoid new onRetry closure per message on every render
+const MemoMessage = memo(function MemoMessage({ message, isStreaming, onRetry }: { message: ChatMessage; isStreaming: boolean; onRetry: (id: string) => void }) {
+	const handleRetry = useCallback(() => onRetry(message.id), [onRetry, message.id]);
+	return <Message message={message} isStreaming={isStreaming} onRetry={handleRetry} />;
+});
+
 type Props = {
 	rpc: any;
 	thread: Thread | null;
 	messages: ChatMessage[];
 	isStreaming: boolean;
-	onSend: (prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number) => void;
+	contextUsage: import("../../bun/types").ContextUsage | null;
+	onSend: (prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number, chatMode?: "chat" | "build" | "plan") => void;
 	onRetry: (messageId: string) => void;
 	onInterrupt: () => void;
 	permissionRequest: PermissionRequest | null;
@@ -269,15 +380,17 @@ type Props = {
 	onThreadUpdated: (thread: Thread) => void;
 };
 
-export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, onInterrupt, permissionRequest, onResolvePermission, onThreadUpdated }: Props) {
+export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onSend, onRetry, onInterrupt, permissionRequest, onResolvePermission, onThreadUpdated }: Props) {
 	const [input, setInput] = useState("");
 	const [cursorPos, setCursorPos] = useState(0);
 	const [selectedHarness, setSelectedHarness] = useState("claude");
 	const [selectedModel, setSelectedModel] = useState("claude-opus-4-6");
 	const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("medium");
 	const [accessMode, setAccessMode] = useState<"full" | "restricted">("full");
+	const [chatMode, setChatMode] = useState<ChatMode>("chat");
 	const [images, setImages] = useState<(ImageAttachment & { id: string; base64: string })[]>([]);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
+	const [commitPopoverOpen, setCommitPopoverOpen] = useState(false);
 	const [userScrolledUp, setUserScrolledUp] = useState(false);
 	const userScrolledUpRef = useRef(false);
 	const bottomRef = useRef<HTMLDivElement>(null);
@@ -285,10 +398,53 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
+	// Per-thread draft persistence
+	const draftsRef = useRef<Map<string, string>>(() => {
+		// Load all drafts from localStorage on first render
+		const map = new Map<string, string>();
+		try {
+			const saved = localStorage.getItem("coder-drafts");
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				for (const [k, v] of Object.entries(parsed)) {
+					if (typeof v === "string" && v.trim()) map.set(k, v);
+				}
+			}
+		} catch {}
+		return map;
+	});
+	// Lazily initialize the ref (React passes the function through on first render)
+	if (typeof draftsRef.current === "function") {
+		draftsRef.current = (draftsRef.current as any)();
+	}
+
+	const saveDraftsToStorage = useCallback(() => {
+		const obj: Record<string, string> = {};
+		for (const [k, v] of draftsRef.current.entries()) {
+			if (v.trim()) obj[k] = v;
+		}
+		try { localStorage.setItem("coder-drafts", JSON.stringify(obj)); } catch {}
+	}, []);
+
+	// Update draft in memory on every keystroke, persist on debounce
+	const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const setInputWithDraft = useCallback((value: string) => {
+		setInput(value);
+		if (thread) {
+			if (value.trim()) {
+				draftsRef.current.set(thread.id, value);
+			} else {
+				draftsRef.current.delete(thread.id);
+			}
+			if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+			draftTimerRef.current = setTimeout(saveDraftsToStorage, 500);
+		}
+	}, [thread, saveDraftsToStorage]);
+
 	// @ file mention autocomplete
 	const fileMention = useFileMention(rpc, thread?.cwd, input, cursorPos);
 
-	// Sync settings from thread when switching
+	// Sync settings + draft from thread when switching
 	const prevSyncThreadId = useRef<string | null>(null);
 	useEffect(() => {
 		if (!thread || thread.id === prevSyncThreadId.current) return;
@@ -297,40 +453,68 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 		setSelectedModel(thread.model ?? "claude-opus-4-6");
 		setThinkingLevel(thread.thinkingLevel ?? "medium");
 		setAccessMode(thread.accessMode ?? "full");
+		setChatMode(thread.chatMode ?? "chat");
+		// Restore draft for this thread
+		setInput(draftsRef.current.get(thread.id) ?? "");
+		// Auto-focus chat input
+		requestAnimationFrame(() => textareaRef.current?.focus());
 	}, [thread]);
 
+	// Check if project has CLAUDE.md (for init prompt)
+	const [hasClaudeMd, setHasClaudeMd] = useState<boolean | null>(null);
+	useEffect(() => {
+		if (!rpc || !thread) { setHasClaudeMd(null); return; }
+		setHasClaudeMd(null);
+		rpc.request.checkFileExists({ cwd: thread.cwd, path: "CLAUDE.md" }).then((exists: boolean) => {
+			setHasClaudeMd(exists);
+		}).catch(() => setHasClaudeMd(null));
+	}, [rpc, thread?.id, thread?.cwd]);
+
 	// Persist settings on change
-	const saveSettings = (harness: string, model: string, mode: "full" | "restricted", thinking: ThinkingLevel) => {
+	const saveSettings = (harness: string, model: string, mode: "full" | "restricted", thinking: ThinkingLevel, modeVal?: ChatMode) => {
 		if (!rpc || !thread) return;
-		rpc.request.updateThreadSettings({ id: thread.id, harness, model, accessMode: mode, thinkingLevel: thinking })
+		rpc.request.updateThreadSettings({ id: thread.id, harness, model, accessMode: mode, thinkingLevel: thinking, chatMode: modeVal })
 			.then((updated: Thread) => onThreadUpdated(updated))
 			.catch(() => {});
 	};
 
 	const changeHarness = (id: string) => {
 		setSelectedHarness(id);
-		saveSettings(id, selectedModel, accessMode, thinkingLevel);
+		saveSettings(id, selectedModel, accessMode, thinkingLevel, chatMode);
 	};
 	const changeModel = (id: string) => {
 		setSelectedModel(id);
-		saveSettings(selectedHarness, id, accessMode, thinkingLevel);
+		saveSettings(selectedHarness, id, accessMode, thinkingLevel, chatMode);
 	};
 	const changeThinkingLevel = (level: ThinkingLevel) => {
 		setThinkingLevel(level);
-		saveSettings(selectedHarness, selectedModel, accessMode, level);
+		saveSettings(selectedHarness, selectedModel, accessMode, level, chatMode);
+	};
+	const changeChatMode = (mode: ChatMode) => {
+		setChatMode(mode);
+		saveSettings(selectedHarness, selectedModel, accessMode, thinkingLevel, mode);
 	};
 	const changeAccessMode = () => {
 		const next = accessMode === "full" ? "restricted" : "full";
 		setAccessMode(next);
-		saveSettings(selectedHarness, selectedModel, next, thinkingLevel);
+		saveSettings(selectedHarness, selectedModel, next, thinkingLevel, chatMode);
 	};
 
+	const scrollThrottleRef = useRef<number | null>(null);
 	const handleScroll = useCallback(() => {
-		const el = scrollContainerRef.current;
-		if (!el) return;
-		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-		userScrolledUpRef.current = !isNearBottom;
-		setUserScrolledUp(!isNearBottom);
+		if (scrollThrottleRef.current !== null) return;
+		scrollThrottleRef.current = requestAnimationFrame(() => {
+			scrollThrottleRef.current = null;
+			const el = scrollContainerRef.current;
+			if (!el) return;
+			const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+			const wasScrolledUp = userScrolledUpRef.current;
+			userScrolledUpRef.current = !isNearBottom;
+			// Only trigger state update if the value actually changed
+			if (wasScrolledUp !== !isNearBottom) {
+				setUserScrolledUp(!isNearBottom);
+			}
+		});
 	}, []);
 
 	const scrollToBottom = useCallback(() => {
@@ -417,12 +601,58 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 				contentBlocks.push({ type: "text", text: input.trim() });
 			}
 			const imageAttachments = images.map((img) => ({ mediaType: img.mediaType, dataUrl: img.dataUrl }));
-			onSend(contentBlocks, model, accessMode, imageAttachments, budget);
+			onSend(contentBlocks, model, accessMode, imageAttachments, budget, chatMode);
 		} else {
-			onSend(input.trim(), model, accessMode, undefined, budget);
+			onSend(input.trim(), model, accessMode, undefined, budget, chatMode);
 		}
-		setInput("");
+		setInputWithDraft("");
 		setImages([]);
+	};
+
+	// Group consecutive tool messages — memoized to avoid recomputation on every render
+	// Must be before the early return to respect Rules of Hooks
+	const groupedMessages = useMemo(() => groupToolMessages(messages), [messages]);
+
+	const hasStreamingMessage = useMemo(() => messages.some((m) => m.role === "assistant" && m.isStreaming), [messages]);
+
+	// Plan approval: detect when streaming ends in plan mode
+	const [pendingPlanApproval, setPendingPlanApproval] = useState(false);
+	const wasStreamingRef = useRef(false);
+	useEffect(() => {
+		if (isStreaming) {
+			wasStreamingRef.current = true;
+		} else if (wasStreamingRef.current) {
+			wasStreamingRef.current = false;
+			if (chatMode === "plan" && messages.length > 0) {
+				const last = messages[messages.length - 1];
+				if (last.role === "assistant" && last.content.trim()) {
+					setPendingPlanApproval(true);
+				}
+			}
+		}
+	}, [isStreaming, chatMode, messages]);
+
+	// Clear plan approval when user switches mode or thread
+	useEffect(() => {
+		setPendingPlanApproval(false);
+	}, [thread?.id]);
+
+	const handleAcceptPlan = () => {
+		setPendingPlanApproval(false);
+		// Find the last assistant message (the plan)
+		const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+		if (!lastAssistant) return;
+		const model = selectedHarness === "claude" ? selectedModel : undefined;
+		const modelDef = CLAUDE_MODELS.find((m) => m.id === selectedModel);
+		const budget = modelDef?.hasThinking ? THINKING_LEVELS.find((l) => l.id === thinkingLevel)?.budget : undefined;
+		// Switch to build mode and send the plan as implementation instruction
+		setChatMode("build");
+		saveSettings(selectedHarness, selectedModel, accessMode, thinkingLevel, "build");
+		onSend("Implement the plan above.", model, accessMode, undefined, budget, "build");
+	};
+
+	const handleDeclinePlan = () => {
+		setPendingPlanApproval(false);
 	};
 
 	if (!thread) {
@@ -438,9 +668,6 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 		);
 	}
 
-	// Group consecutive tool messages
-	const groupedMessages = groupToolMessages(messages);
-
 	return (
 		<div className="flex-1 flex flex-col min-w-0 bg-[#181818] chat-grain relative">
 			{/* Top Bar */}
@@ -454,6 +681,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 					</span>
 				</div>
 				<div className="flex items-center gap-2 ml-4 flex-shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+					{contextUsage && <ContextBar usage={contextUsage} />}
 					{isStreaming && (
 						<button
 							onClick={onInterrupt}
@@ -465,6 +693,25 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 							Stop
 						</button>
 					)}
+					<div className="relative">
+						<button
+							onClick={() => setCommitPopoverOpen(!commitPopoverOpen)}
+							className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer border ${
+								commitPopoverOpen
+									? "text-emerald-400 bg-emerald-600/10 border-emerald-600/20 hover:bg-emerald-600/20"
+									: "text-[#999] bg-transparent border-[#2a2b2e] hover:text-white hover:bg-[#2a2b2e]"
+							}`}
+							title="Commit & Push"
+						>
+							<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+								<path d="M8 13V3M4 7l4-4 4 4" />
+							</svg>
+							Push
+						</button>
+						{commitPopoverOpen && (
+							<CommitPushPopover rpc={rpc} cwd={thread.cwd} onClose={() => setCommitPopoverOpen(false)} />
+						)}
+					</div>
 					<button
 						onClick={() => setGitDiffOpen(!gitDiffOpen)}
 						className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer border ${
@@ -488,13 +735,33 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 			<div className="flex-1 overflow-y-auto px-6 py-6 relative" ref={scrollContainerRef} onScroll={handleScroll}>
 				<div className="max-w-4xl mx-auto">
 					{messages.length === 0 && !isStreaming && (
-						<div className="h-full flex items-center justify-center text-[#444] text-sm py-20">
-							Send a message to start coding
+						<div className="h-full flex flex-col items-center justify-center text-[#444] text-sm py-20 gap-4">
+							<span>Send a message to start coding</span>
+							{hasClaudeMd === false && selectedHarness === "claude" && (
+								<button
+									onClick={() => {
+										const model = selectedHarness === "claude" ? selectedModel : undefined;
+										const modelDef = CLAUDE_MODELS.find((m) => m.id === selectedModel);
+										const budget = modelDef?.hasThinking ? THINKING_LEVELS.find((l) => l.id === thinkingLevel)?.budget : undefined;
+										onSend("/init", model, accessMode, undefined, budget, chatMode);
+										// Re-check after a delay to update the state
+										setTimeout(() => {
+											rpc?.request.checkFileExists({ cwd: thread!.cwd, path: "CLAUDE.md" }).then((exists: boolean) => setHasClaudeMd(exists)).catch(() => {});
+										}, 5000);
+									}}
+									className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#999] border border-[#333] rounded-lg hover:text-white hover:border-[#555] hover:bg-[#232428] transition-colors cursor-pointer"
+								>
+									<svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M8 2v12M5 5l3-3 3 3" />
+									</svg>
+									Initialize CLAUDE.md
+								</button>
+							)}
 						</div>
 					)}
 					{groupedMessages.map((item, i) => {
 						if (item.type === "tool-group") {
-							return <ToolCallGroup key={i} tools={item.messages} />;
+							return <ToolCallGroup key={`tg-${item.messages[0]?.id ?? i}`} tools={item.messages} />;
 						}
 						if (item.type === "file-edit") {
 							const tool = item.message;
@@ -509,15 +776,15 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 							);
 						}
 						return (
-							<Message
+							<MemoMessage
 								key={item.message.id}
 								message={item.message}
 								isStreaming={isStreaming}
-								onRetry={() => onRetry(item.message.id)}
+								onRetry={onRetry}
 							/>
 						);
 					})}
-					{isStreaming && !messages.some((m) => m.role === "assistant" && m.isStreaming) && (
+					{isStreaming && !hasStreamingMessage && (
 						<ThinkingShimmer />
 					)}
 					<div ref={bottomRef} />
@@ -547,6 +814,11 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 				)
 			)}
 
+			{/* Plan approval panel */}
+			{pendingPlanApproval && !isStreaming && !permissionRequest && (
+				<PlanApprovalPanel onAccept={handleAcceptPlan} onDecline={handleDeclinePlan} />
+			)}
+
 			{/* Input Area */}
 			<div className="px-6 pb-12">
 				<div className="max-w-4xl mx-auto">
@@ -565,7 +837,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 									onSelect={(entry) => {
 										const result = fileMention.applySelection(entry);
 										if (result) {
-											setInput(result.newInput);
+											setInputWithDraft(result.newInput);
 											setCursorPos(result.newCursorPos);
 											requestAnimationFrame(() => {
 												textareaRef.current?.setSelectionRange(result.newCursorPos, result.newCursorPos);
@@ -579,7 +851,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 								ref={textareaRef}
 								value={input}
 								onChange={(e) => {
-									setInput(e.target.value);
+									setInputWithDraft(e.target.value);
 									setCursorPos(e.target.selectionStart ?? 0);
 								}}
 								onSelect={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
@@ -587,7 +859,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 								onKeyDown={(e) => {
 									const mentionResult = fileMention.handleKeyDown(e);
 									if (mentionResult && typeof mentionResult === "object") {
-										setInput(mentionResult.newInput);
+										setInputWithDraft(mentionResult.newInput);
 										setCursorPos(mentionResult.newCursorPos);
 										requestAnimationFrame(() => {
 											textareaRef.current?.setSelectionRange(mentionResult.newCursorPos, mentionResult.newCursorPos);
@@ -596,6 +868,13 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 									}
 									if (mentionResult === true) return;
 
+									if (e.key === "Tab" && e.shiftKey) {
+										e.preventDefault();
+										const modes: ChatMode[] = ["chat", "build", "plan"];
+										const idx = modes.indexOf(chatMode);
+										const next = modes[(idx + 1) % modes.length];
+										changeChatMode(next);
+									}
 									if (e.key === "Enter" && !e.shiftKey) {
 										e.preventDefault();
 										handleSend();
@@ -665,9 +944,10 @@ export function ChatView({ rpc, thread, messages, isStreaming, onSend, onRetry, 
 										<ThinkingSelector selectedModel={selectedModel} thinkingLevel={thinkingLevel} onSelect={changeThinkingLevel} />
 									</>
 								)}
+								<ModeSelector chatMode={chatMode} onSelect={changeChatMode} />
 								<button
 									onClick={changeAccessMode}
-									className={`flex items-center gap-1.5 cursor-pointer transition-colors ${accessMode === "full" ? "text-green-400 hover:text-green-300" : "text-orange-400 hover:text-orange-300"}`}
+									className="flex items-center gap-1.5 cursor-pointer hover:text-white transition-colors"
 								>
 									{accessMode === "full" ? (
 										<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -752,7 +1032,7 @@ function groupToolMessages(messages: ChatMessage[]): GroupedItem[] {
 	return result;
 }
 
-function ToolCallGroup({ tools }: { tools: ChatMessage[] }) {
+const ToolCallGroup = memo(function ToolCallGroup({ tools }: { tools: ChatMessage[] }) {
 	const [expanded, setExpanded] = useState(false);
 
 	return (
@@ -803,7 +1083,7 @@ function ToolCallGroup({ tools }: { tools: ChatMessage[] }) {
 			</div>
 		</div>
 	);
-}
+});
 
 function formatToolLabel(toolName: string): string {
 	const labels: Record<string, string> = {
@@ -1012,6 +1292,40 @@ function PermissionPanel({ request, onResolve }: { request: PermissionRequest; o
 							className="px-4 py-1.5 text-[13px] bg-[#e0e0e0] text-[#1b1b1b] font-medium rounded-md hover:bg-white transition-colors cursor-pointer"
 						>
 							Allow
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function PlanApprovalPanel({ onAccept, onDecline }: { onAccept: () => void; onDecline: () => void }) {
+	return (
+		<div className="border-t border-[#2a2b2e] bg-[#1b1b1b]">
+			<div className="max-w-4xl mx-auto px-6 py-3">
+				<div className="flex items-center gap-3">
+					<div className="flex-1 min-w-0">
+						<div className="flex items-center gap-2 mb-0.5">
+							<svg className="w-4 h-4 text-[#888]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+								<path d="M4 2v12M4 2l8 4-8 4" />
+							</svg>
+							<span className="text-[13px] text-[#888]">Plan ready</span>
+						</div>
+						<p className="text-[14px] text-[#e0e0e0]">Accept to implement this plan, or decline to continue chatting.</p>
+					</div>
+					<div className="flex items-center gap-2 flex-shrink-0">
+						<button
+							onClick={onDecline}
+							className="px-4 py-1.5 text-[13px] text-[#999] hover:text-white transition-colors cursor-pointer"
+						>
+							Decline
+						</button>
+						<button
+							onClick={onAccept}
+							className="px-4 py-1.5 text-[13px] bg-[#e0e0e0] text-[#1b1b1b] font-medium rounded-md hover:bg-white transition-colors cursor-pointer"
+						>
+							Accept & Build
 						</button>
 					</div>
 				</div>

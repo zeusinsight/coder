@@ -8,6 +8,7 @@ export type Thread = {
 	model?: string;
 	accessMode?: "full" | "restricted";
 	thinkingLevel?: "low" | "medium" | "high";
+	chatMode?: "chat" | "build" | "plan";
 	createdAt: string;
 	updatedAt: string;
 };
@@ -35,4 +36,17 @@ export type QueryResult = {
 	threadId: string;
 	success: boolean;
 	error?: string;
+};
+
+export type AppSettings = {
+	groqApiKey?: string;
+};
+
+export type ContextUsage = {
+	threadId: string;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheCreationTokens: number;
+	contextWindow: number;
 };

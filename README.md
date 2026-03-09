@@ -1,61 +1,95 @@
-# React + Tailwind + Vite Electrobun Template
+# Coder
 
-A fast Electrobun desktop app template with React, Tailwind CSS, and Vite for hot module replacement (HMR).
+A native desktop AI coding assistant built with [Electrobun](https://electrobun.dev), React, and the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-sdk). Think of it as a GUI for Claude Code — multi-threaded conversations, file mentions, git integration, and a built-in terminal, all in a lightweight desktop app.
+
+## Features
+
+- **Multi-threaded chat** — Persistent conversation threads grouped by project
+- **File mentions** — Reference files in your project directory directly in chat
+- **Git integration** — View uncommitted diffs in a slide-over panel, manage branches, and create AI-assisted commits
+- **Built-in terminal** — Full PTY terminal embedded in the app
+- **Tool permissions** — Approve or deny tool usage requests from Claude, with auto-deny timeout
+- **Chat modes** — Switch between `chat`, `build`, and `plan` modes
+- **Search** — Full-text search across all threads
+- **Syntax highlighting** — Powered by Shiki
+- **Context tracking** — Monitor token usage per conversation
+
+## Tech Stack
+
+- **Runtime**: [Bun](https://bun.sh)
+- **Desktop framework**: [Electrobun](https://electrobun.dev) (lightweight Chromium-based, not Electron)
+- **Frontend**: React 18, TypeScript (strict mode), Tailwind CSS
+- **AI**: [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
+- **Terminal**: xterm.js + bun-pty
+- **Code highlighting**: Shiki
+- **Markdown**: react-markdown + remark-gfm
 
 ## Getting Started
 
+### Prerequisites
+
+- [Bun](https://bun.sh) installed
+- An Anthropic API key (set as `ANTHROPIC_API_KEY` environment variable)
+
+### Install & Run
+
 ```bash
+# Clone the repo
+git clone https://github.com/zeusinsight/coder.git
+cd coder
+
 # Install dependencies
 bun install
 
-# Development without HMR (uses bundled assets)
-bun run dev
-
-# Development with HMR (recommended)
+# Run with hot module replacement (recommended for development)
 bun run dev:hmr
 
-# Build for production
-bun run build
-
-# Build for production release
-bun run build:prod
+# Or run without HMR
+bun run start
 ```
 
-## How HMR Works
+### Build
 
-When you run `bun run dev:hmr`:
-
-1. **Vite dev server** starts on `http://localhost:5173` with HMR enabled
-2. **Electrobun** starts and detects the running Vite server
-3. The app loads from the Vite dev server instead of bundled assets
-4. Changes to React components update instantly without full page reload
-
-When you run `bun run dev` (without HMR):
-
-1. Electrobun starts and loads from `views://mainview/index.html`
-2. You need to rebuild (`bun run build`) to see changes
-
-## Project Structure
-
-```
-├── src/
-│   ├── bun/
-│   │   └── index.ts        # Main process (Electrobun/Bun)
-│   └── mainview/
-│       ├── App.tsx         # React app component
-│       ├── main.tsx        # React entry point
-│       ├── index.html      # HTML template
-│       └── index.css       # Tailwind CSS
-├── electrobun.config.ts    # Electrobun configuration
-├── vite.config.ts          # Vite configuration
-├── tailwind.config.js      # Tailwind configuration
-└── package.json
+```bash
+# Canary build
+bun run build:canary
 ```
 
-## Customizing
+## Architecture
 
-- **React components**: Edit files in `src/mainview/`
-- **Tailwind theme**: Edit `tailwind.config.js`
-- **Vite settings**: Edit `vite.config.ts`
-- **Window settings**: Edit `src/bun/index.ts`
-- **App metadata**: Edit `electrobun.config.ts`
+```
+src/
+├── bun/                        # Main process (Bun + Electrobun)
+│   ├── index.ts                # App entry, window management, RPC handlers
+│   ├── claude-bridge.ts        # Claude Agent SDK integration
+│   ├── thread-store.ts         # Thread/message persistence (~/.coder/)
+│   ├── pty-manager.ts          # Terminal PTY handling
+│   ├── rpc-schema.ts           # Type-safe RPC definitions
+│   └── types.ts                # Shared types
+│
+└── mainview/                   # Frontend (React + Vite)
+    ├── components/             # React components
+    │   ├── chat-view.tsx       # Main chat interface
+    │   ├── sidebar.tsx         # Thread list & navigation
+    │   ├── terminal-panel.tsx  # Embedded terminal
+    │   ├── branch-selector.tsx # Git branch management
+    │   ├── git-diff-sidebar.tsx # Uncommitted changes viewer
+    │   └── ...
+    └── hooks/                  # Custom React hooks
+        ├── use-chat.ts         # Chat state & streaming
+        ├── use-threads.ts      # Thread CRUD
+        ├── use-terminal.tsx    # Terminal state
+        ├── use-branches.ts     # Git branch operations
+        └── use-file-mention.ts # File mention handling
+```
+
+**Three-layer design:**
+1. **Main process** (Bun) — File I/O, git operations, Claude SDK integration
+2. **RPC layer** — Bidirectional type-safe communication between main process and webview
+3. **Frontend** (React) — UI rendering, state management via custom hooks
+
+Data is stored locally in `~/.coder/` (threads, messages, context usage).
+
+## License
+
+[MIT](LICENSE)

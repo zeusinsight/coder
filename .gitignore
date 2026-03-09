@@ -3,3 +3,5 @@ dist/
 build/
 bun.lock
 .DS_Store
+*.env
+.env.*

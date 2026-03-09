@@ -46,8 +46,8 @@ function DeleteConfirmDialog({ threadTitle, onConfirm, onCancel }: { threadTitle
 					>
 						Delete
 						<span className="flex items-center gap-0.5">
-							<Kbd>&#8984;</Kbd>
-							<Kbd>&#9166;</Kbd>
+							<Kbd className="border-red-400/40 bg-red-700/50 text-red-100">&#8984;</Kbd>
+							<Kbd className="border-red-400/40 bg-red-700/50 text-red-100">&#9166;</Kbd>
 						</span>
 					</button>
 				</div>
@@ -89,6 +89,7 @@ const ThreadItem = memo(function ThreadItem({
 	onSetEditTitle,
 	onPin,
 	onDelete,
+	onForceDelete,
 	onPreloadThread,
 }: {
 	thread: Thread;
@@ -103,6 +104,7 @@ const ThreadItem = memo(function ThreadItem({
 	onSetEditTitle: (title: string) => void;
 	onPin: (id: string, pinned: boolean) => void;
 	onDelete: (thread: Thread) => void;
+	onForceDelete: (id: string) => void;
 	onPreloadThread?: (id: string) => void;
 }) {
 	return (
@@ -195,10 +197,14 @@ const ThreadItem = memo(function ThreadItem({
 					<button
 						onClick={(e) => {
 							e.stopPropagation();
-							onDelete(thread);
+							if (e.shiftKey) {
+								onForceDelete(thread.id);
+							} else {
+								onDelete(thread);
+							}
 						}}
 						className="w-5 h-5 flex items-center justify-center text-[#555] hover:text-red-400 hover:bg-[#333] rounded text-[12px] transition-colors"
-						title="Delete"
+						title="Delete (Shift+click to skip confirmation)"
 					>
 						&#10005;
 					</button>
@@ -350,6 +356,7 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 										onSetEditTitle={setEditTitle}
 										onPin={onPin}
 										onDelete={setDeletingThread}
+										onForceDelete={onDelete}
 									onPreloadThread={onPreloadThread}
 									/>
 								))}

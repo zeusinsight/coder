@@ -378,9 +378,11 @@ type Props = {
 	permissionRequest: PermissionRequest | null;
 	onResolvePermission: (allow: boolean, updatedInput?: Record<string, unknown>) => void;
 	onThreadUpdated: (thread: Thread) => void;
+	onToggleTerminal?: () => void;
+	showTerminal?: boolean;
 };
 
-export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onSend, onRetry, onInterrupt, permissionRequest, onResolvePermission, onThreadUpdated }: Props) {
+export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onSend, onRetry, onInterrupt, permissionRequest, onResolvePermission, onThreadUpdated, onToggleTerminal, showTerminal }: Props) {
 	const [input, setInput] = useState("");
 	const [cursorPos, setCursorPos] = useState(0);
 	const [selectedHarness, setSelectedHarness] = useState("claude");
@@ -657,7 +659,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 
 	if (!thread) {
 		return (
-			<div className="flex-1 flex flex-col bg-[#181818]">
+			<div className="flex-1 flex flex-col min-h-0 bg-[#181818]">
 				<div className="h-[52px] flex-shrink-0 electrobun-webkit-app-region-drag" />
 				<div className="flex-1 flex items-center justify-center text-[#444]">
 					<div className="text-5xl mb-4 font-mono font-bold">{"</>"}</div>
@@ -669,7 +671,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 	}
 
 	return (
-		<div className="flex-1 flex flex-col min-w-0 bg-[#181818] chat-grain relative">
+		<div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#181818] chat-grain relative">
 			{/* Top Bar */}
 			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e] electrobun-webkit-app-region-drag">
 				<div className="flex items-center gap-3 min-w-0">
@@ -717,6 +719,23 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 						</svg>
 						Diff
 					</button>
+					{onToggleTerminal && (
+						<button
+							onClick={onToggleTerminal}
+							className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors cursor-pointer border ${
+								showTerminal
+									? "text-cyan-400 bg-cyan-600/10 border-cyan-600/20 hover:bg-cyan-600/20"
+									: "text-[#999] bg-transparent border-[#2a2b2e] hover:text-white hover:bg-[#2a2b2e]"
+							}`}
+							title="Toggle Terminal (Ctrl+`)"
+						>
+							<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+								<path d="M4 5l3 3-3 3" />
+								<path d="M9 11h3" />
+							</svg>
+							Terminal
+						</button>
+					)}
 				</div>
 			</div>
 

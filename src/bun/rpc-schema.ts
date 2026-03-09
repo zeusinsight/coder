@@ -22,13 +22,23 @@ export type CoderRPC = {
 			updateSettings: { params: AppSettings; response: AppSettings };
 			generateCommitMessage: { params: { cwd: string }; response: { message: string; error?: string } };
 			commitAndPush: { params: { cwd: string; message: string }; response: { success: boolean; error?: string } };
+			// Branch management
+			getCurrentBranch: { params: { cwd: string }; response: { branch: string | null; error?: string } };
+			listBranches: { params: { cwd: string }; response: { current: string; local: string[]; remote: string[]; error?: string } };
+			switchBranch: { params: { cwd: string; branch: string; create: boolean }; response: { success: boolean; error?: string } };
 			searchMessages: { params: { query: string }; response: SearchResult[] };
+			// Terminal
+			createTerminal: { params: { id: string; cwd: string; cols: number; rows: number }; response: void };
+			destroyTerminal: { params: { id: string }; response: void };
 		};
 		messages: {
 			sendMessage: { threadId: string; prompt: string | any[]; model?: string; accessMode?: "full" | "restricted"; images?: { mediaType: string; dataUrl: string }[]; thinkingBudget?: number; chatMode?: "chat" | "build" | "plan" };
 			interruptQuery: { threadId: string };
 			resolvePermission: { id: string; allow: boolean; updatedInput?: Record<string, unknown> };
 			openExternal: { url: string };
+			// Terminal
+			writeTerminal: { id: string; data: string };
+			resizeTerminal: { id: string; cols: number; rows: number };
 		};
 	}>;
 	webview: RPCSchema<{
@@ -40,6 +50,10 @@ export type CoderRPC = {
 			onQueryResult: QueryResult;
 			onThreadMessages: { threadId: string; messages: StreamMessage[] };
 			onContextUsage: ContextUsage;
+			// Terminal
+			onTerminalData: { id: string; data: string };
+			onTerminalExit: { id: string; exitCode: number };
+			onTerminalTitle: { id: string; title: string };
 		};
 	}>;
 };

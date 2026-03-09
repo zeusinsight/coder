@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useThreads } from "../hooks/use-threads";
 import { useChat } from "../hooks/use-chat";
 import { Sidebar } from "./sidebar";
 import { ChatView } from "./chat-view";
+import { TerminalPanel, type TerminalPanelHandle } from "./terminal-panel";
 import { SettingsModal } from "./settings-modal";
 import { SearchOverlay } from "./search-overlay";
 import { onRpcMessage } from "../rpc-events";
+import { TerminalContext } from "../hooks/use-terminal";
 
 type Props = {
 	electroview: { rpc: any };
@@ -45,6 +47,21 @@ export function App({ electroview }: Props) {
 
 	const [showSettings, setShowSettings] = useState(false);
 	const [showSearch, setShowSearch] = useState(false);
+	const [showTerminal, setShowTerminal] = useState(false);
+	const [terminalHeight, setTerminalHeight] = useState(280);
+	const terminalRef = useRef<TerminalPanelHandle>(null);
+
+	const terminalContext = useMemo(() => ({
+		runCommand: (command: string) => {
+			// Open terminal if not already open
+			setShowTerminal(true);
+			// Small delay to ensure terminal is mounted before sending command
+			setTimeout(() => {
+				terminalRef.current?.runCommand(command);
+			}, showTerminal ? 0 : 300);
+		},
+		isOpen: showTerminal,
+	}), [showTerminal]);
 
 	const handleDeleteThread = useCallback((id: string) => {
 		deleteThread(id);
@@ -76,48 +93,70 @@ export function App({ electroview }: Props) {
 				e.preventDefault();
 				setShowSearch((s) => !s);
 			}
+			// Ctrl+` or Cmd+J to toggle terminal
+			if ((e.ctrlKey && e.key === "`") || (e.metaKey && e.key === "j")) {
+				e.preventDefault();
+				setShowTerminal((s) => !s);
+			}
 		};
 		window.addEventListener("keydown", handler);
 		return () => window.removeEventListener("keydown", handler);
 	}, [addProject, createThreadInProject, activeThread]);
 
 	return (
-		<div className="flex h-screen bg-[#181818] text-[#c9ccd1]">
-			<Sidebar
-				threads={threads}
-				activeThreadId={activeThreadId}
-				getThreadStatus={getThreadStatus}
-				onSelect={setActiveThreadId}
-				onAddProject={addProject}
-				onNewThread={createThreadInProject}
-				onDelete={handleDeleteThread}
-				onRename={renameThread}
-				onPin={pinThread}
-				onOpenSettings={() => setShowSettings(true)}
-			/>
-			<ChatView
-				rpc={rpc}
-				thread={activeThread}
-				messages={messages}
-				isStreaming={isStreaming}
-				contextUsage={contextUsage}
-				onSend={sendMessage}
-				onRetry={retryFromMessage}
-				onInterrupt={interruptQuery}
-				permissionRequest={permissionRequest}
-				onResolvePermission={resolvePermission}
-				onThreadUpdated={updateThreadInList}
-			/>
-			{showSettings && (
-				<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
-			)}
-			{showSearch && (
-				<SearchOverlay
+		<TerminalContext.Provider value={terminalContext}>
+			<div className="flex h-screen bg-[#181818] text-[#c9ccd1]">
+				<Sidebar
 					rpc={rpc}
+					threads={threads}
+					activeThreadId={activeThreadId}
+					getThreadStatus={getThreadStatus}
 					onSelect={setActiveThreadId}
-					onClose={() => setShowSearch(false)}
+					onAddProject={addProject}
+					onNewThread={createThreadInProject}
+					onDelete={handleDeleteThread}
+					onRename={renameThread}
+					onPin={pinThread}
+					onOpenSettings={() => setShowSettings(true)}
 				/>
-			)}
-		</div>
+				<div className="flex-1 flex flex-col min-w-0">
+					<ChatView
+						rpc={rpc}
+						thread={activeThread}
+						messages={messages}
+						isStreaming={isStreaming}
+						contextUsage={contextUsage}
+						onSend={sendMessage}
+						onRetry={retryFromMessage}
+						onInterrupt={interruptQuery}
+						permissionRequest={permissionRequest}
+						onResolvePermission={resolvePermission}
+						onThreadUpdated={updateThreadInList}
+						onToggleTerminal={() => setShowTerminal((s) => !s)}
+						showTerminal={showTerminal}
+					/>
+					<TerminalPanel
+						ref={terminalRef}
+						rpc={rpc}
+						cwd={activeThread?.cwd ?? "/"}
+						isOpen={showTerminal}
+						height={terminalHeight}
+						onResize={setTerminalHeight}
+						onClose={() => setShowTerminal(false)}
+						onOpenExternal={(url) => rpc.send.openExternal({ url })}
+					/>
+				</div>
+				{showSettings && (
+					<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
+				)}
+				{showSearch && (
+					<SearchOverlay
+						rpc={rpc}
+						onSelect={setActiveThreadId}
+						onClose={() => setShowSearch(false)}
+					/>
+				)}
+			</div>
+		</TerminalContext.Provider>
 	);
 }

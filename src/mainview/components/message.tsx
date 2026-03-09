@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../hooks/use-chat";
 import { CodeBlock } from "./code-block";
+import { useTerminal } from "../hooks/use-terminal";
 
 // Stable reference to avoid react-markdown re-initializing plugins on every render
 const REMARK_PLUGINS = [remarkGfm];
@@ -70,6 +71,7 @@ export const Message = memo(function Message({ message, onRetry, isStreaming }: 
 	if (message.role === "tool") return null;
 
 	const segments = useMemo(() => parseSegments(message.content), [message.content]);
+	const { runCommand } = useTerminal();
 
 	// Assistant message
 	return (
@@ -77,7 +79,7 @@ export const Message = memo(function Message({ message, onRetry, isStreaming }: 
 			<div className="text-[#e0e0e0] text-[15px] leading-[1.7]">
 				{segments.map((seg, i) =>
 					seg.type === "code" ? (
-						<CodeBlock key={i} code={seg.code} language={seg.language} />
+						<CodeBlock key={i} code={seg.code} language={seg.language} onRunInTerminal={runCommand} />
 					) : (
 						<div key={i} className="prose prose-invert prose-base max-w-none prose-headings:text-[#e0e0e0] prose-p:my-1 prose-p:leading-[1.7] prose-p:text-[15px] prose-code:text-[#e0e0e0] prose-code:bg-[#2a2b2e] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:font-normal prose-pre:bg-[#111] prose-pre:border prose-pre:border-[#2a2b2e] prose-pre:rounded-lg">
 							<Markdown remarkPlugins={REMARK_PLUGINS}>{seg.text}</Markdown>

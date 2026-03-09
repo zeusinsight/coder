@@ -43,6 +43,7 @@ export function App({ electroview }: Props) {
 		contextUsage,
 		getThreadStatus,
 		cleanupThread,
+		preloadThread,
 	} = useChat(rpc, activeThreadId);
 
 	const [showSettings, setShowSettings] = useState(false);
@@ -118,6 +119,7 @@ export function App({ electroview }: Props) {
 					onRename={renameThread}
 					onPin={pinThread}
 					onOpenSettings={() => setShowSettings(true)}
+				onPreloadThread={preloadThread}
 				/>
 				<div className="flex-1 flex flex-col min-w-0">
 					<ChatView

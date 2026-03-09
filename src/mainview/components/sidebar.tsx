@@ -68,6 +68,7 @@ type Props = {
 	onRename: (id: string, title: string) => void;
 	onPin: (id: string, pinned: boolean) => void;
 	onOpenSettings: () => void;
+	onPreloadThread?: (id: string) => void;
 };
 
 function getProjectName(cwd: string) {
@@ -88,6 +89,7 @@ const ThreadItem = memo(function ThreadItem({
 	onSetEditTitle,
 	onPin,
 	onDelete,
+	onPreloadThread,
 }: {
 	thread: Thread;
 	isActive: boolean;
@@ -101,6 +103,7 @@ const ThreadItem = memo(function ThreadItem({
 	onSetEditTitle: (title: string) => void;
 	onPin: (id: string, pinned: boolean) => void;
 	onDelete: (thread: Thread) => void;
+	onPreloadThread?: (id: string) => void;
 }) {
 	return (
 		<div
@@ -108,6 +111,7 @@ const ThreadItem = memo(function ThreadItem({
 				isActive ? "bg-[#2a2b2e]" : "hover:bg-[#252525]"
 			}`}
 			onClick={() => onSelect(thread.id)}
+			onMouseEnter={() => onPreloadThread?.(thread.id)}
 		>
 			{/* Pin indicator */}
 			{thread.pinned && (
@@ -205,7 +209,7 @@ const ThreadItem = memo(function ThreadItem({
 	);
 });
 
-export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin, onOpenSettings }: Props) {
+export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin, onOpenSettings, onPreloadThread }: Props) {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -346,6 +350,7 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 										onSetEditTitle={setEditTitle}
 										onPin={onPin}
 										onDelete={setDeletingThread}
+									onPreloadThread={onPreloadThread}
 									/>
 								))}
 								</div>

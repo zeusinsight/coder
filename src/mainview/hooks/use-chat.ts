@@ -399,6 +399,20 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 	// Derive context usage for active thread
 	const contextUsage = activeThreadId ? contextUsages.get(activeThreadId) ?? null : null;
 
+	// Preload thread messages on hover (before the thread is selected)
+	const preloadThread = useCallback((threadId: string) => {
+		if (!rpc || loadedThreadsRef.current.has(threadId)) return;
+		loadedThreadsRef.current.add(threadId);
+		rpc.request.loadThreadMessages({ threadId }).then((saved: ChatMessage[]) => {
+			if (saved && saved.length > 0) {
+				messagesRef.current.set(threadId, saved);
+			}
+		}).catch(() => {
+			// Remove from loaded set so it can be retried
+			loadedThreadsRef.current.delete(threadId);
+		});
+	}, [rpc]);
+
 	// Cleanup messages for deleted threads to prevent memory leaks
 	const cleanupThread = useCallback((threadId: string) => {
 		messagesRef.current.delete(threadId);
@@ -428,5 +442,6 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 		handleContextUsage,
 		getThreadStatus,
 		cleanupThread,
+		preloadThread,
 	};
 }

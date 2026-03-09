@@ -527,10 +527,18 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 
 	const prevThreadId = useRef(thread?.id);
 	const prevIsStreaming = useRef(isStreaming);
+	const threadJustSwitchedRef = useRef(false);
 	useEffect(() => {
 		const threadChanged = thread?.id !== prevThreadId.current;
 		prevThreadId.current = thread?.id;
 		if (threadChanged) {
+			userScrolledUpRef.current = false;
+			setUserScrolledUp(false);
+			threadJustSwitchedRef.current = true;
+			bottomRef.current?.scrollIntoView({ behavior: "instant" });
+		} else if (threadJustSwitchedRef.current) {
+			// Messages just loaded after a thread switch — scroll instantly, no animation
+			threadJustSwitchedRef.current = false;
 			userScrolledUpRef.current = false;
 			setUserScrolledUp(false);
 			bottomRef.current?.scrollIntoView({ behavior: "instant" });

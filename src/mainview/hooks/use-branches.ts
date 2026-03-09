@@ -69,6 +69,13 @@ export function useBranches(rpc: any, cwd: string) {
 		return () => window.removeEventListener("focus", handler);
 	}, [refresh]);
 
+	// Refresh when git operations complete (commit/push, etc.)
+	useEffect(() => {
+		const handler = () => refresh();
+		window.addEventListener("branches:refresh", handler);
+		return () => window.removeEventListener("branches:refresh", handler);
+	}, [refresh]);
+
 	return {
 		currentBranch: state.current,
 		localBranches: state.local,

@@ -74,6 +74,7 @@ export function CommitPushPopover({ rpc, cwd, onClose }: Props) {
 			const result = await rpc.request.commitAndPush({ cwd, message: message.trim() });
 			if (result.success) {
 				setSuccess(true);
+				window.dispatchEvent(new Event("branches:refresh"));
 				setTimeout(onClose, 1200);
 			} else {
 				setError(result.error ?? "Failed to commit and push");

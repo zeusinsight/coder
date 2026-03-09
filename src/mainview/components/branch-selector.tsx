@@ -7,15 +7,19 @@ type Props = {
 	cwd: string;
 };
 
+type ListItem = { type: "local" | "remote" | "create"; branch: string };
+
 export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) {
 	const { currentBranch, localBranches, remoteBranches, loading, error, refresh, switchBranch } = useBranches(rpc, cwd);
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const [switching, setSwitching] = useState(false);
 	const [showRemote, setShowRemote] = useState(false);
+	const [activeIndex, setActiveIndex] = useState(0);
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const listRef = useRef<HTMLDivElement>(null);
 	const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
 	// Position dropdown relative to the button
@@ -39,6 +43,7 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 			) {
 				setOpen(false);
 				setQuery("");
+				setActiveIndex(0);
 			}
 		};
 		document.addEventListener("mousedown", handler);
@@ -50,6 +55,7 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 		if (open) {
 			updatePosition();
 			refresh();
+			setActiveIndex(0);
 			setTimeout(() => inputRef.current?.focus(), 0);
 		}
 	}, [open, refresh, updatePosition]);
@@ -68,27 +74,90 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 
 	const canCreate = query.trim() && !localBranches.includes(query.trim()) && !localBranches.some((b) => b.toLowerCase() === query.trim().toLowerCase());
 
+	// Build a flat list of all selectable items for keyboard nav
+	const selectableItems = useMemo(() => {
+		const items: ListItem[] = [];
+		for (const b of filteredLocal) items.push({ type: "local", branch: b });
+		if (showRemote) {
+			for (const b of filteredRemote) items.push({ type: "remote", branch: b });
+		}
+		if (canCreate) items.push({ type: "create", branch: query.trim() });
+		return items;
+	}, [filteredLocal, filteredRemote, showRemote, canCreate, query]);
+
+	// Reset activeIndex when list changes
+	useEffect(() => {
+		setActiveIndex(0);
+	}, [query, showRemote]);
+
+	const close = () => {
+		setOpen(false);
+		setQuery("");
+		setActiveIndex(0);
+	};
+
 	const handleSelect = async (branch: string, create: boolean = false) => {
 		if (branch === currentBranch && !create) return;
 		setSwitching(true);
 		await switchBranch(branch, create);
 		setSwitching(false);
-		setOpen(false);
-		setQuery("");
+		close();
 	};
 
 	const handleCheckoutRemote = async (remoteBranch: string) => {
-		// "origin/feature-x" → "feature-x"
 		const localName = remoteBranch.replace(/^[^/]+\//, "");
 		setSwitching(true);
 		await switchBranch(localName, false);
 		setSwitching(false);
-		setOpen(false);
-		setQuery("");
+		close();
 	};
+
+	const handleItemAction = (item: ListItem) => {
+		if (item.type === "local") handleSelect(item.branch);
+		else if (item.type === "remote") handleCheckoutRemote(item.branch);
+		else if (item.type === "create") handleSelect(item.branch, true);
+	};
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Escape") {
+			close();
+			return;
+		}
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setActiveIndex((i) => Math.min(i + 1, selectableItems.length - 1));
+			return;
+		}
+		if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setActiveIndex((i) => Math.max(i - 1, 0));
+			return;
+		}
+		if (e.key === "Enter") {
+			e.preventDefault();
+			if (selectableItems.length > 0 && activeIndex < selectableItems.length) {
+				handleItemAction(selectableItems[activeIndex]);
+			}
+			return;
+		}
+	};
+
+	// Scroll active item into view
+	useEffect(() => {
+		if (!open || !listRef.current) return;
+		const active = listRef.current.querySelector(`[data-index="${activeIndex}"]`);
+		if (active) active.scrollIntoView({ block: "nearest" });
+	}, [activeIndex, open]);
+
+	// Detached HEAD or not a git repo
+	const isDetached = currentBranch === "HEAD";
+	const displayBranch = isDetached ? "detached" : currentBranch;
 
 	// Don't render if not a git repo
 	if (!currentBranch && !loading) return null;
+
+	// Track the flat index across sections
+	let itemIndex = 0;
 
 	return (
 		<>
@@ -99,11 +168,11 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 					e.stopPropagation();
 					setOpen((o) => !o);
 				}}
-				className="flex items-center gap-1 max-w-[120px] px-1.5 py-0.5 rounded bg-[#252525] hover:bg-[#2e2e2e] border border-[#333] hover:border-[#444] transition-colors cursor-pointer"
+				className={`flex items-center gap-1 max-w-[120px] px-1.5 py-0.5 rounded bg-[#252525] hover:bg-[#2e2e2e] border hover:border-[#444] transition-colors cursor-pointer ${isDetached ? "border-amber-500/40" : "border-[#333]"}`}
 				title={currentBranch ?? "Loading..."}
 			>
 				{/* Git branch icon */}
-				<svg className="w-3 h-3 text-[#888] flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+				<svg className={`w-3 h-3 flex-shrink-0 ${isDetached ? "text-amber-500" : "text-[#888]"}`} viewBox="0 0 16 16" fill="currentColor">
 					<path fillRule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6A2.5 2.5 0 013.5 6V5.372a2.25 2.25 0 111.5 0V6a1 1 0 001 1h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 10.628V12.75a2.25 2.25 0 101.5 0v-2.122a2.25 2.25 0 11-1.5 0z" clipRule="evenodd" />
 				</svg>
 				{switching || loading ? (
@@ -111,8 +180,8 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 						<circle cx="8" cy="8" r="6" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
 					</svg>
 				) : (
-					<span className="text-[11px] text-[#999] truncate" style={{ fontFamily: "'Geist Mono', monospace" }}>
-						{currentBranch ?? "..."}
+					<span className={`text-[11px] truncate ${isDetached ? "text-amber-400 italic" : "text-[#999]"}`} style={{ fontFamily: "'Geist Mono', monospace" }}>
+						{displayBranch ?? "..."}
 					</span>
 				)}
 				{/* Dropdown chevron */}
@@ -135,18 +204,7 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 							type="text"
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Escape") {
-									setOpen(false);
-									setQuery("");
-								}
-								if (e.key === "Enter" && canCreate) {
-									handleSelect(query.trim(), true);
-								}
-								if (e.key === "Enter" && !canCreate && filteredLocal.length === 1) {
-									handleSelect(filteredLocal[0]);
-								}
-							}}
+							onKeyDown={handleKeyDown}
 							placeholder="Switch or create branch..."
 							className="w-full bg-[#252525] border border-[#333] rounded px-2 py-1.5 text-[12px] text-white placeholder-[#555] outline-none focus:border-[#555]"
 							style={{ fontFamily: "'Geist Mono', monospace" }}
@@ -161,32 +219,41 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 					)}
 
 					{/* Branch list */}
-					<div className="max-h-[280px] overflow-y-auto">
+					<div ref={listRef} className="max-h-[280px] overflow-y-auto">
 						{/* Local branches */}
 						{filteredLocal.length > 0 && (
 							<div>
 								<div className="px-3 py-1.5 text-[10px] text-[#666] uppercase tracking-wider font-medium" style={{ fontFamily: "'Geist', sans-serif" }}>
 									Local
 								</div>
-								{filteredLocal.map((branch) => (
-									<button
-										key={branch}
-										onClick={() => handleSelect(branch)}
-										className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors cursor-pointer ${
-											branch === currentBranch
-												? "text-white bg-[#2a2b2e]"
-												: "text-[#ccc] hover:bg-[#252525]"
-										}`}
-										style={{ fontFamily: "'Geist Mono', monospace" }}
-									>
-										{branch === currentBranch && (
-											<svg className="w-3 h-3 text-emerald-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-												<path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
-											</svg>
-										)}
-										<span className={`truncate ${branch !== currentBranch ? "ml-5" : ""}`}>{branch}</span>
-									</button>
-								))}
+								{filteredLocal.map((branch) => {
+									const idx = itemIndex++;
+									return (
+										<button
+											key={branch}
+											data-index={idx}
+											onClick={() => handleSelect(branch)}
+											onMouseEnter={() => setActiveIndex(idx)}
+											className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors cursor-pointer ${
+												idx === activeIndex
+													? "bg-[#2a2b2e] text-white"
+													: branch === currentBranch
+														? "text-white"
+														: "text-[#ccc] hover:bg-[#252525]"
+											}`}
+											style={{ fontFamily: "'Geist Mono', monospace" }}
+										>
+											{branch === currentBranch ? (
+												<svg className="w-3 h-3 text-emerald-400 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+													<path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+												</svg>
+											) : (
+												<span className="w-3 flex-shrink-0" />
+											)}
+											<span className="truncate">{branch}</span>
+										</button>
+									);
+								})}
 							</div>
 						)}
 
@@ -212,36 +279,53 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 									Remote ({filteredRemote.length})
 								</button>
 								{showRemote &&
-									filteredRemote.map((branch) => (
-										<button
-											key={branch}
-											onClick={() => handleCheckoutRemote(branch)}
-											className="w-full flex items-center gap-2 px-3 py-1.5 ml-5 text-[12px] text-[#888] hover:text-[#ccc] hover:bg-[#252525] transition-colors cursor-pointer"
-											style={{ fontFamily: "'Geist Mono', monospace" }}
-										>
-											<span className="truncate">{branch}</span>
-										</button>
-									))}
+									filteredRemote.map((branch) => {
+										const idx = itemIndex++;
+										return (
+											<button
+												key={branch}
+												data-index={idx}
+												onClick={() => handleCheckoutRemote(branch)}
+												onMouseEnter={() => setActiveIndex(idx)}
+												className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors cursor-pointer ${
+													idx === activeIndex
+														? "bg-[#2a2b2e] text-[#ccc]"
+														: "text-[#888] hover:text-[#ccc] hover:bg-[#252525]"
+												}`}
+												style={{ fontFamily: "'Geist Mono', monospace" }}
+											>
+												<span className="w-3 flex-shrink-0" />
+												<span className="truncate">{branch}</span>
+											</button>
+										);
+									})}
 							</div>
 						)}
 
 						{/* Create new branch option */}
-						{canCreate && (
-							<div className="border-t border-[#2a2b2e]">
-								<button
-									onClick={() => handleSelect(query.trim(), true)}
-									className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-emerald-400 hover:bg-[#252525] transition-colors cursor-pointer"
-									style={{ fontFamily: "'Geist Mono', monospace" }}
-								>
-									<svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-										<path d="M8 3v10M3 8h10" />
-									</svg>
-									<span>
-										Create <span className="font-semibold">{query.trim()}</span>
-									</span>
-								</button>
-							</div>
-						)}
+						{canCreate && (() => {
+							const idx = itemIndex++;
+							return (
+								<div className="border-t border-[#2a2b2e]">
+									<button
+										data-index={idx}
+										onClick={() => handleSelect(query.trim(), true)}
+										onMouseEnter={() => setActiveIndex(idx)}
+										className={`w-full flex items-center gap-2 px-3 py-2 text-[12px] text-emerald-400 transition-colors cursor-pointer ${
+											idx === activeIndex ? "bg-[#252525]" : ""
+										}`}
+										style={{ fontFamily: "'Geist Mono', monospace" }}
+									>
+										<svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+											<path d="M8 3v10M3 8h10" />
+										</svg>
+										<span>
+											Create <span className="font-semibold">{query.trim()}</span>
+										</span>
+									</button>
+								</div>
+							);
+						})()}
 
 						{/* Empty state */}
 						{filteredLocal.length === 0 && filteredRemote.length === 0 && !canCreate && (

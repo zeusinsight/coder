@@ -669,7 +669,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 		return (
 			<div className="flex-1 flex flex-col min-h-0 bg-[#181818]">
 				<div className="h-[52px] flex-shrink-0 electrobun-webkit-app-region-drag" />
-				<div className="flex-1 flex items-center justify-center text-[#444]">
+				<div className="flex-1 flex flex-col items-center justify-center text-[#444]">
 					<div className="text-5xl mb-4 font-mono font-bold">{"</>"}</div>
 					<div className="text-lg font-semibold text-[#555]">Coder</div>
 					<div className="text-sm mt-1 text-[#444]">Select or create a project to start</div>

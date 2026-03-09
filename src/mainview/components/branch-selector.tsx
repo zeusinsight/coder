@@ -9,6 +9,25 @@ type Props = {
 
 type ListItem = { type: "local" | "remote" | "create"; branch: string };
 
+function formatGitError(raw: string): string {
+	// Clean up common git error messages to be more user-friendly
+	if (raw.includes("would be overwritten by checkout") || raw.includes("would be overwritten by merge")) {
+		const fileMatches = raw.match(/\t(.+)/g);
+		const files = fileMatches ? fileMatches.map(f => f.trim()).slice(0, 3) : [];
+		const fileList = files.length > 0 ? files.join(", ") : "some files";
+		const extra = fileMatches && fileMatches.length > 3 ? ` and ${fileMatches.length - 3} more` : "";
+		return `Uncommitted changes in ${fileList}${extra} would be lost. Commit or stash your changes first.`;
+	}
+	if (raw.includes("not a git repository")) {
+		return "This directory is not a git repository.";
+	}
+	// Strip "error: " and "fatal: " prefixes, and "Aborting" suffix
+	let cleaned = raw.replace(/^(error|fatal):\s*/gim, "").replace(/\s*Aborting\.?\s*$/i, "").trim();
+	// Take just the first meaningful line
+	const firstLine = cleaned.split("\n").find(l => l.trim().length > 0) ?? cleaned;
+	return firstLine.length > 150 ? firstLine.slice(0, 147) + "..." : firstLine;
+}
+
 export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) {
 	const { currentBranch, localBranches, remoteBranches, loading, error, refresh, switchBranch } = useBranches(rpc, cwd);
 	const [open, setOpen] = useState(false);
@@ -101,15 +120,23 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 		setSwitching(true);
 		await switchBranch(branch, create);
 		setSwitching(false);
-		close();
+		// Only close if the switch succeeded (no error)
 	};
+
+	// Close dropdown when branch actually changes (success)
+	const prevBranchRef = useRef(currentBranch);
+	useEffect(() => {
+		if (prevBranchRef.current !== currentBranch && currentBranch) {
+			close();
+		}
+		prevBranchRef.current = currentBranch;
+	}, [currentBranch]);
 
 	const handleCheckoutRemote = async (remoteBranch: string) => {
 		const localName = remoteBranch.replace(/^[^/]+\//, "");
 		setSwitching(true);
 		await switchBranch(localName, false);
 		setSwitching(false);
-		close();
 	};
 
 	const handleItemAction = (item: ListItem) => {
@@ -213,8 +240,13 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 
 					{/* Error message */}
 					{error && (
-						<div className="px-3 py-2 text-[11px] text-red-400 bg-red-500/10 border-b border-[#2a2b2e]">
-							{error.length > 120 ? error.slice(0, 120) + "..." : error}
+						<div className="px-3 py-2.5 text-[12px] text-red-300 bg-red-500/10 border-b border-red-500/20 leading-relaxed">
+							<div className="flex items-start gap-2">
+								<svg className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 16 16" fill="currentColor">
+									<path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 5a.75.75 0 011.5 0v3a.75.75 0 01-1.5 0V5zm.75 6.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
+								</svg>
+								<span>{formatGitError(error)}</span>
+							</div>
 						</div>
 					)}
 

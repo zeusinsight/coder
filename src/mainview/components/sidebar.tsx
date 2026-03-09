@@ -277,14 +277,14 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 					return (
 						<div key={project.cwd} className="mb-4">
 							{/* Project header */}
-							<div className="group flex items-center px-2 py-2 hover:bg-[#252525]">
+							<div className="group flex items-center gap-1.5 px-2 py-2 hover:bg-[#252525]">
+								{/* Chevron */}
 								<button
 									onClick={() => toggleProject(project.cwd)}
-									className="flex items-center gap-3 min-w-0 cursor-pointer"
+									className="flex-shrink-0 cursor-pointer"
 								>
-									{/* Chevron */}
 									<svg
-										className={`w-3.5 h-3.5 text-[#666] transition-transform flex-shrink-0 ${isCollapsed ? "-rotate-90" : ""}`}
+										className={`w-3.5 h-3.5 text-[#666] transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
 										viewBox="0 0 16 16"
 										fill="none"
 										stroke="currentColor"
@@ -294,23 +294,31 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 									>
 										<path d="M4 6l4 4 4-4" />
 									</svg>
-									{/* Project icon — dark square with italic N */}
-									<span className="w-[22px] h-[22px] bg-[#2a2a2a] border border-[#3a3a3a] flex items-center justify-center flex-shrink-0">
-										<span className="text-[11px] font-bold text-white italic" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-											N
-										</span>
-									</span>
-									{/* Project name */}
-									<span className="text-white text-[15px] font-semibold truncate" style={{ fontFamily: "'Geist', sans-serif" }}>
-										{project.name}
-									</span>
 								</button>
+								{/* Project icon */}
+								<span
+									onClick={() => toggleProject(project.cwd)}
+									className="w-[22px] h-[22px] bg-[#2a2a2a] border border-[#3a3a3a] flex items-center justify-center flex-shrink-0 cursor-pointer"
+								>
+									<span className="text-[11px] font-bold text-white italic" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+										N
+									</span>
+								</span>
+								{/* Project name — truncates to make room */}
+								<span
+									onClick={() => toggleProject(project.cwd)}
+									className="text-white text-[15px] font-semibold truncate min-w-[40px] cursor-pointer"
+									style={{ fontFamily: "'Geist', sans-serif" }}
+									title={project.name}
+								>
+									{project.name}
+								</span>
 								{/* Branch selector */}
-								<div className="ml-2 flex-shrink min-w-0">
+								<div className="flex-shrink-0">
 									<BranchSelector rpc={rpc} cwd={project.cwd} />
 								</div>
-								{/* Spacer to push + button right */}
-								<div className="flex-1" />
+								{/* Spacer */}
+								<div className="flex-1 min-w-0" />
 								{/* New thread button — always occupies space, invisible until hover */}
 								<button
 									onClick={() => onNewThread(project.cwd)}

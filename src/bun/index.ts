@@ -9,6 +9,36 @@ import type { CoderRPC } from "./rpc-schema";
 import * as store from "./thread-store";
 import * as bridge from "./claude-bridge";
 
+// Application menu — MUST be set before any await or BrowserWindow creation
+// (see https://github.com/blackboardsh/electrobun/issues/136)
+ApplicationMenu.setApplicationMenu([
+	{
+		submenu: [{ label: "Quit Coder", role: "quit" }],
+	},
+	{
+		label: "File",
+		submenu: [
+			{ label: "New Thread", action: "new-thread", accelerator: "n" },
+			{ type: "separator" },
+			{ label: "Quit", role: "quit" },
+		],
+	},
+	{
+		label: "Edit",
+		submenu: [
+			{ role: "undo" },
+			{ role: "redo" },
+			{ type: "separator" },
+			{ role: "cut" },
+			{ role: "copy" },
+			{ role: "paste" },
+			{ role: "pasteAndMatchStyle" },
+			{ role: "delete" },
+			{ role: "selectAll" },
+		],
+	},
+]);
+
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
@@ -286,33 +316,6 @@ bridge.setSender({
 	onThreadMessages: (data) => webviewRpc.send.onThreadMessages(data),
 	onContextUsage: (data) => webviewRpc.send.onContextUsage(data),
 });
-
-// Application menu
-ApplicationMenu.setApplicationMenu([
-	{
-		submenu: [{ label: "Quit Coder", role: "quit" }],
-	},
-	{
-		label: "File",
-		submenu: [
-			{ label: "New Thread", action: "new-thread", accelerator: "n" },
-			{ type: "separator" },
-			{ label: "Quit", role: "quit" },
-		],
-	},
-	{
-		label: "Edit",
-		submenu: [
-			{ label: "Undo", role: "undo", accelerator: "CommandOrControl+Z" },
-			{ label: "Redo", role: "redo", accelerator: "CommandOrControl+Shift+Z" },
-			{ type: "separator" },
-			{ label: "Cut", role: "cut", accelerator: "CommandOrControl+X" },
-			{ label: "Copy", role: "copy", accelerator: "CommandOrControl+C" },
-			{ label: "Paste", role: "paste", accelerator: "CommandOrControl+V" },
-			{ label: "Select All", role: "selectAll", accelerator: "CommandOrControl+A" },
-		],
-	},
-]);
 
 Electrobun.events.on("application-menu-clicked", (e) => {
 	if (e.data.action === "new-thread") {

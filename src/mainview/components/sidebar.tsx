@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import type { Thread } from "../../bun/types";
 import type { ThreadStatus } from "../hooks/use-chat";
+import { BranchSelector } from "./branch-selector";
 
 function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
 	return (
@@ -56,6 +57,7 @@ function DeleteConfirmDialog({ threadTitle, onConfirm, onCancel }: { threadTitle
 }
 
 type Props = {
+	rpc: any;
 	threads: Thread[];
 	activeThreadId: string | null;
 	getThreadStatus: (threadId: string) => ThreadStatus;
@@ -203,7 +205,7 @@ const ThreadItem = memo(function ThreadItem({
 	);
 });
 
-export const Sidebar = memo(function Sidebar({ threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin, onOpenSettings }: Props) {
+export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, getThreadStatus, onSelect, onAddProject, onNewThread, onDelete, onRename, onPin, onOpenSettings }: Props) {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 	const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
@@ -278,7 +280,7 @@ export const Sidebar = memo(function Sidebar({ threads, activeThreadId, getThrea
 							<div className="group flex items-center px-2 py-2 hover:bg-[#252525]">
 								<button
 									onClick={() => toggleProject(project.cwd)}
-									className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+									className="flex items-center gap-3 min-w-0 cursor-pointer"
 								>
 									{/* Chevron */}
 									<svg
@@ -299,14 +301,20 @@ export const Sidebar = memo(function Sidebar({ threads, activeThreadId, getThrea
 										</span>
 									</span>
 									{/* Project name */}
-									<span className="text-white text-[15px] font-semibold" style={{ fontFamily: "'Geist', sans-serif" }}>
+									<span className="text-white text-[15px] font-semibold truncate" style={{ fontFamily: "'Geist', sans-serif" }}>
 										{project.name}
 									</span>
 								</button>
-								{/* New thread button */}
+								{/* Branch selector */}
+								<div className="ml-2 flex-shrink min-w-0">
+									<BranchSelector rpc={rpc} cwd={project.cwd} />
+								</div>
+								{/* Spacer to push + button right */}
+								<div className="flex-1" />
+								{/* New thread button — always occupies space, invisible until hover */}
 								<button
 									onClick={() => onNewThread(project.cwd)}
-									className="hidden group-hover:flex items-center justify-center w-5 h-5 text-[#555] hover:text-[#aaa] transition-colors flex-shrink-0"
+									className="invisible group-hover:visible flex items-center justify-center w-5 h-5 text-[#555] hover:text-[#aaa] transition-colors flex-shrink-0"
 									title="New thread"
 								>
 									<svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">

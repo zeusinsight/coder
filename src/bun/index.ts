@@ -8,6 +8,7 @@ import Electrobun, { ApplicationMenu } from "electrobun/bun";
 import type { CoderRPC } from "./rpc-schema";
 import * as store from "./thread-store";
 import * as bridge from "./claude-bridge";
+import * as ptyManager from "./pty-manager";
 
 // Application menu — MUST be set before any await or BrowserWindow creation
 // (see https://github.com/blackboardsh/electrobun/issues/136)
@@ -260,7 +261,54 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 					return { files: [], error: e.message ?? "Failed to get git diff" };
 				}
 			},
+			getCurrentBranch: async ({ cwd }) => {
+				try {
+					const { execSync } = await import("child_process");
+					const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
+					return { branch: branch || null };
+				} catch (e: any) {
+					return { branch: null, error: e.message ?? "Not a git repository" };
+				}
+			},
+			listBranches: async ({ cwd }) => {
+				try {
+					const { execSync } = await import("child_process");
+					const current = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
+					const localRaw = execSync("git branch", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
+					const local = localRaw
+						.split("\n")
+						.map((b) => b.replace(/^\*?\s*/, "").trim())
+						.filter(Boolean);
+					let remote: string[] = [];
+					try {
+						const remoteRaw = execSync("git branch -r", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
+						remote = remoteRaw
+							.split("\n")
+							.map((b) => b.trim())
+							.filter((b) => b && !b.includes("->"));
+					} catch {}
+					return { current, local, remote };
+				} catch (e: any) {
+					return { current: "", local: [], remote: [], error: e.message ?? "Failed to list branches" };
+				}
+			},
+			switchBranch: async ({ cwd, branch, create }) => {
+				try {
+					const { execSync } = await import("child_process");
+					const cmd = create ? `git switch -c ${JSON.stringify(branch)}` : `git switch ${JSON.stringify(branch)}`;
+					execSync(cmd, { cwd, encoding: "utf-8", timeout: 10000, env: userShellEnv });
+					return { success: true };
+				} catch (e: any) {
+					return { success: false, error: e.message ?? "Failed to switch branch" };
+				}
+			},
 			searchMessages: ({ query }) => store.searchMessages(query),
+			createTerminal: ({ id, cwd, cols, rows }) => {
+				ptyManager.createTerminal(id, cwd, cols, rows, userShellEnv);
+			},
+			destroyTerminal: ({ id }) => {
+				ptyManager.destroyTerminal(id);
+			},
 			pickDirectory: async () => {
 				const paths = await Utils.openFileDialog({
 					startingFolder: process.env.HOME ?? "/",
@@ -286,6 +334,12 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			},
 			openExternal: ({ url }) => {
 				Utils.openExternal(url);
+			},
+			writeTerminal: ({ id, data }) => {
+				ptyManager.writeTerminal(id, data);
+			},
+			resizeTerminal: ({ id, cols, rows }) => {
+				ptyManager.resizeTerminal(id, cols, rows);
 			},
 		},
 	},
@@ -315,6 +369,12 @@ bridge.setSender({
 	onThreadUpdated: (data) => webviewRpc.send.onThreadUpdated(data),
 	onThreadMessages: (data) => webviewRpc.send.onThreadMessages(data),
 	onContextUsage: (data) => webviewRpc.send.onContextUsage(data),
+});
+
+ptyManager.setSender({
+	onTerminalData: (data) => webviewRpc.send.onTerminalData(data),
+	onTerminalExit: (data) => webviewRpc.send.onTerminalExit(data),
+	onTerminalTitle: (data) => webviewRpc.send.onTerminalTitle(data),
 });
 
 Electrobun.events.on("application-menu-clicked", (e) => {

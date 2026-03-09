@@ -4,7 +4,10 @@ import { createHighlighter, type Highlighter } from "shiki";
 type Props = {
 	code: string;
 	language: string;
+	onRunInTerminal?: (command: string) => void;
 };
+
+const SHELL_LANGUAGES = new Set(["sh", "bash", "zsh", "shell", ""]);
 
 const LANGUAGE_LABELS: Record<string, string> = {
 	js: "JavaScript",
@@ -91,10 +94,14 @@ function getCacheKey(code: string, lang: string): string {
 	return `${lang}:${code}`;
 }
 
-export const CodeBlock = memo(function CodeBlock({ code, language }: Props) {
+export const CodeBlock = memo(function CodeBlock({ code, language, onRunInTerminal }: Props) {
 	const [html, setHtml] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
+	const [ran, setRan] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+	const isShell = SHELL_LANGUAGES.has(language.toLowerCase());
+	const canRun = isShell && onRunInTerminal;
 
 	useEffect(() => {
 		const key = getCacheKey(code, language || "text");
@@ -129,6 +136,14 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: Props) {
 		timerRef.current = setTimeout(() => setCopied(false), 2000);
 	};
 
+	const handleRun = () => {
+		if (!onRunInTerminal) return;
+		onRunInTerminal(code);
+		setRan(true);
+		clearTimeout(timerRef.current);
+		timerRef.current = setTimeout(() => setRan(false), 2000);
+	};
+
 	return (
 		<div className="rounded-lg border border-[#2a2b2e] overflow-hidden my-3 bg-[#1b1b1b]">
 			{/* Header */}
@@ -136,27 +151,52 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: Props) {
 				<span className="text-[12px] text-[#888] font-mono">
 					{language ? getLabel(language) : "Code"}
 				</span>
-				<button
-					onClick={handleCopy}
-					className="flex items-center gap-1.5 text-[12px] text-[#666] hover:text-[#ccc] transition-colors cursor-pointer"
-				>
-					{copied ? (
-						<>
-							<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-								<path d="M13 4L6 11L3 8" />
-							</svg>
-							Copied
-						</>
-					) : (
-						<>
-							<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-								<rect x="5" y="5" width="8" height="8" rx="1.5" />
-								<path d="M3 11V3h8" />
-							</svg>
-							Copy
-						</>
+				<div className="flex items-center gap-2">
+					{canRun && (
+						<button
+							onClick={handleRun}
+							className="flex items-center gap-1.5 text-[12px] text-[#666] hover:text-cyan-400 transition-colors cursor-pointer"
+							title="Run in Terminal"
+						>
+							{ran ? (
+								<>
+									<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+										<path d="M13 4L6 11L3 8" />
+									</svg>
+									Sent
+								</>
+							) : (
+								<>
+									<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+										<path d="M4 2l9 6-9 6V2z" />
+									</svg>
+									Run
+								</>
+							)}
+						</button>
 					)}
-				</button>
+					<button
+						onClick={handleCopy}
+						className="flex items-center gap-1.5 text-[12px] text-[#666] hover:text-[#ccc] transition-colors cursor-pointer"
+					>
+						{copied ? (
+							<>
+								<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+									<path d="M13 4L6 11L3 8" />
+								</svg>
+								Copied
+							</>
+						) : (
+							<>
+								<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+									<rect x="5" y="5" width="8" height="8" rx="1.5" />
+									<path d="M3 11V3h8" />
+								</svg>
+								Copy
+							</>
+						)}
+					</button>
+				</div>
 			</div>
 			{/* Code */}
 			<div className="overflow-x-auto p-4 text-[13px] leading-[1.6] [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:!bg-transparent [&_code]:!p-0 [&_code]:!text-[13px]">

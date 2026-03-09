@@ -17,6 +17,9 @@ const rpc = Electroview.defineRPC<CoderRPC>({
 			onQueryResult: (data) => emitRpcMessage("onQueryResult", data),
 			onThreadMessages: (data) => emitRpcMessage("onThreadMessages", data),
 			onContextUsage: (data) => emitRpcMessage("onContextUsage", data),
+			onTerminalData: (data) => emitRpcMessage("onTerminalData", data),
+			onTerminalExit: (data) => emitRpcMessage("onTerminalExit", data),
+			onTerminalTitle: (data) => emitRpcMessage("onTerminalTitle", data),
 		},
 	},
 });

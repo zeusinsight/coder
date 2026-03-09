@@ -16,6 +16,7 @@ const rpc = Electroview.defineRPC<CoderRPC>({
 			onPermissionRequest: (data) => emitRpcMessage("onPermissionRequest", data),
 			onQueryResult: (data) => emitRpcMessage("onQueryResult", data),
 			onThreadMessages: (data) => emitRpcMessage("onThreadMessages", data),
+			onContextUsage: (data) => emitRpcMessage("onContextUsage", data),
 		},
 	},
 });

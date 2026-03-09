@@ -1,8 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, memo, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../hooks/use-chat";
 import { CodeBlock } from "./code-block";
+
+// Stable reference to avoid react-markdown re-initializing plugins on every render
+const REMARK_PLUGINS = [remarkGfm];
 
 type Props = {
 	message: ChatMessage;
@@ -10,7 +13,7 @@ type Props = {
 	isStreaming?: boolean;
 };
 
-export function Message({ message, onRetry, isStreaming }: Props) {
+export const Message = memo(function Message({ message, onRetry, isStreaming }: Props) {
 	const [copied, setCopied] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -66,7 +69,7 @@ export function Message({ message, onRetry, isStreaming }: Props) {
 	// Tool messages are handled by ToolCallGroup in chat-view
 	if (message.role === "tool") return null;
 
-	const segments = parseSegments(message.content);
+	const segments = useMemo(() => parseSegments(message.content), [message.content]);
 
 	// Assistant message
 	return (
@@ -77,7 +80,7 @@ export function Message({ message, onRetry, isStreaming }: Props) {
 						<CodeBlock key={i} code={seg.code} language={seg.language} />
 					) : (
 						<div key={i} className="prose prose-invert prose-base max-w-none prose-headings:text-[#e0e0e0] prose-p:my-1 prose-p:leading-[1.7] prose-p:text-[15px] prose-code:text-[#e0e0e0] prose-code:bg-[#2a2b2e] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:font-normal prose-pre:bg-[#111] prose-pre:border prose-pre:border-[#2a2b2e] prose-pre:rounded-lg">
-							<Markdown remarkPlugins={[remarkGfm]}>{seg.text}</Markdown>
+							<Markdown remarkPlugins={REMARK_PLUGINS}>{seg.text}</Markdown>
 						</div>
 					)
 				)}
@@ -125,7 +128,7 @@ export function Message({ message, onRetry, isStreaming }: Props) {
 			)}
 		</div>
 	);
-}
+});
 
 type Segment =
 	| { type: "text"; text: string }

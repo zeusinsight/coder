@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
 
 type DiffFile = {
 	path: string;
@@ -45,7 +45,7 @@ function parseDiffLines(diff: string): { type: "add" | "remove" | "context" | "h
 	}).filter((l) => l.type !== "header" || l.text.startsWith("@@"));
 }
 
-export function GitDiffSidebar({ rpc, cwd, isOpen, onClose }: Props) {
+export const GitDiffSidebar = memo(function GitDiffSidebar({ rpc, cwd, isOpen, onClose }: Props) {
 	const [files, setFiles] = useState<DiffFile[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -71,9 +71,11 @@ export function GitDiffSidebar({ rpc, cwd, isOpen, onClose }: Props) {
 		if (isOpen) fetchDiff();
 	}, [isOpen, fetchDiff]);
 
-	const addedCount = files.filter((f) => f.status === "added").length;
-	const modifiedCount = files.filter((f) => f.status === "modified").length;
-	const deletedCount = files.filter((f) => f.status === "deleted").length;
+	const { addedCount, modifiedCount, deletedCount } = useMemo(() => ({
+		addedCount: files.filter((f) => f.status === "added").length,
+		modifiedCount: files.filter((f) => f.status === "modified").length,
+		deletedCount: files.filter((f) => f.status === "deleted").length,
+	}), [files]);
 
 	return (
 		<div
@@ -228,4 +230,4 @@ export function GitDiffSidebar({ rpc, cwd, isOpen, onClose }: Props) {
 			</div>
 		</div>
 	);
-}
+});

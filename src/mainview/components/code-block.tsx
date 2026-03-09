@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { codeToHtml } from "shiki";
+import { useState, useEffect, useRef, memo } from "react";
+import { createHighlighter, type Highlighter } from "shiki";
 
 type Props = {
 	code: string;
@@ -51,19 +51,70 @@ function getLabel(lang: string) {
 	return LANGUAGE_LABELS[lang.toLowerCase()] ?? lang.toUpperCase();
 }
 
-export function CodeBlock({ code, language }: Props) {
+// Singleton highlighter — loads languages on demand, NOT all 300+ upfront
+let highlighterPromise: Promise<Highlighter> | null = null;
+const loadedLangs = new Set<string>();
+
+function getHighlighter(): Promise<Highlighter> {
+	if (!highlighterPromise) {
+		highlighterPromise = createHighlighter({
+			themes: ["github-dark-default"],
+			langs: [], // start empty — load on demand
+		});
+	}
+	return highlighterPromise;
+}
+
+async function highlight(code: string, lang: string): Promise<string> {
+	const hl = await getHighlighter();
+	const normalizedLang = lang || "text";
+
+	// Lazy-load the language grammar if not yet loaded
+	if (normalizedLang !== "text" && !loadedLangs.has(normalizedLang)) {
+		try {
+			await hl.loadLanguage(normalizedLang as any);
+			loadedLangs.add(normalizedLang);
+		} catch {
+			// Language not supported — fall back to text
+			return hl.codeToHtml(code, { lang: "text", theme: "github-dark-default" });
+		}
+	}
+
+	return hl.codeToHtml(code, { lang: normalizedLang, theme: "github-dark-default" });
+}
+
+// LRU cache for shiki highlighting results
+const shikiCache = new Map<string, string>();
+const SHIKI_CACHE_MAX = 200;
+
+function getCacheKey(code: string, lang: string): string {
+	return `${lang}:${code}`;
+}
+
+export const CodeBlock = memo(function CodeBlock({ code, language }: Props) {
 	const [html, setHtml] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
 	useEffect(() => {
+		const key = getCacheKey(code, language || "text");
+		const cached = shikiCache.get(key);
+		if (cached) {
+			setHtml(cached);
+			return;
+		}
 		let cancelled = false;
-		codeToHtml(code, {
-			lang: language || "text",
-			theme: "github-dark-default",
-		})
+		highlight(code, language || "text")
 			.then((result) => {
-				if (!cancelled) setHtml(result);
+				if (!cancelled) {
+					// Evict oldest entries if cache is full
+					if (shikiCache.size >= SHIKI_CACHE_MAX) {
+						const firstKey = shikiCache.keys().next().value;
+						if (firstKey) shikiCache.delete(firstKey);
+					}
+					shikiCache.set(key, result);
+					setHtml(result);
+				}
 			})
 			.catch(() => {
 				if (!cancelled) setHtml(null);
@@ -117,4 +168,4 @@ export function CodeBlock({ code, language }: Props) {
 			</div>
 		</div>
 	);
-}
+});

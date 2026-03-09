@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { StreamMessage, PermissionRequest } from "../../bun/types";
+import { useState, useEffect, useCallback, useRef, useReducer, useMemo } from "react";
+import type { StreamMessage, PermissionRequest, ContextUsage } from "../../bun/types";
 
 export type ImageAttachment = {
 	mediaType: string;
@@ -21,15 +21,48 @@ export type ChatMessage = {
 
 export type ThreadStatus = "idle" | "working" | "completed" | "pending_approval";
 
+const EMPTY_MESSAGES: ChatMessage[] = [];
+
 export function useChat(rpc: any, activeThreadId: string | null) {
-	const [messages, setMessages] = useState<Map<string, ChatMessage[]>>(new Map());
+	// Performance: use ref + reducer tick for batched renders during streaming
+	const messagesRef = useRef(new Map<string, ChatMessage[]>());
+	const [renderTick, forceRender] = useReducer((c: number) => c + 1, 0);
+	const pendingRafRef = useRef<number | null>(null);
+
+	// Schedule a batched render at next animation frame (max ~60fps during streaming)
+	const scheduleRender = useCallback(() => {
+		if (pendingRafRef.current === null) {
+			pendingRafRef.current = requestAnimationFrame(() => {
+				pendingRafRef.current = null;
+				forceRender();
+			});
+		}
+	}, []);
+
+	// Force an immediate render (for non-streaming updates)
+	const flushRender = useCallback(() => {
+		if (pendingRafRef.current !== null) {
+			cancelAnimationFrame(pendingRafRef.current);
+			pendingRafRef.current = null;
+		}
+		forceRender();
+	}, []);
+
 	const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null);
+	const streamingChunksRef = useRef<string[]>([]);
 	const streamingTextRef = useRef("");
 
 	// Per-thread status tracking
 	const [threadStatuses, setThreadStatuses] = useState<Map<string, ThreadStatus>>(new Map());
 
-	const threadMessages = activeThreadId ? messages.get(activeThreadId) ?? [] : [];
+	// Per-thread context usage tracking
+	const [contextUsages, setContextUsages] = useState<Map<string, ContextUsage>>(new Map());
+
+	const threadMessages = useMemo(
+		() => (activeThreadId ? messagesRef.current.get(activeThreadId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[activeThreadId, renderTick]
+	);
 
 	// Clear "completed" when user views the thread
 	useEffect(() => {
@@ -53,13 +86,29 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 		loadedThreadsRef.current.add(activeThreadId);
 		rpc.request.loadThreadMessages({ threadId: activeThreadId }).then((saved: ChatMessage[]) => {
 			if (saved && saved.length > 0) {
-				setMessages((prev) => new Map(prev).set(activeThreadId, saved));
+				messagesRef.current.set(activeThreadId, saved);
+				flushRender();
 			}
 		}).catch(() => {});
-	}, [rpc, activeThreadId]);
+		// Load saved context usage for this thread
+		rpc.request.loadContextUsage({ threadId: activeThreadId }).then((saved: ContextUsage | null) => {
+			if (saved) {
+				setContextUsages((prev) => new Map(prev).set(activeThreadId!, saved));
+			}
+		}).catch(() => {});
+	}, [rpc, activeThreadId, flushRender]);
 
 	const activeThreadIdRef = useRef(activeThreadId);
 	activeThreadIdRef.current = activeThreadId;
+
+	// Cleanup rAF on unmount
+	useEffect(() => {
+		return () => {
+			if (pendingRafRef.current !== null) {
+				cancelAnimationFrame(pendingRafRef.current);
+			}
+		};
+	}, []);
 
 	const handleStreamChunk = useCallback(
 		(data: { threadId: string; message: StreamMessage }) => {
@@ -74,21 +123,23 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 				return prev;
 			});
 
-			// Partial streaming text
+			// Partial streaming text — batched at ~60fps
 			if (message.type === "assistant_partial" && message.result) {
-				streamingTextRef.current += message.result;
-				setMessages((prev) => {
-					const existing = prev.get(threadId) ?? [];
-					const lastMsg = existing[existing.length - 1];
-					if (lastMsg?.role === "assistant" && lastMsg.isStreaming) {
-						const updated = [...existing];
-						updated[updated.length - 1] = {
-							...lastMsg,
-							content: streamingTextRef.current,
-						};
-						return new Map(prev).set(threadId, updated);
-					}
-					return new Map(prev).set(threadId, [
+				streamingChunksRef.current.push(message.result);
+				streamingTextRef.current = streamingChunksRef.current.join("");
+				const map = messagesRef.current;
+				const existing = map.get(threadId) ?? [];
+				const lastMsg = existing[existing.length - 1];
+				if (lastMsg?.role === "assistant" && lastMsg.isStreaming) {
+					// Mutate in place for performance — only update the content
+					const updated = existing.slice();
+					updated[updated.length - 1] = {
+						...lastMsg,
+						content: streamingTextRef.current,
+					};
+					map.set(threadId, updated);
+				} else {
+					map.set(threadId, [
 						...existing,
 						{
 							id: crypto.randomUUID(),
@@ -98,7 +149,8 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 							createdAt: Date.now(),
 						},
 					]);
-				});
+				}
+				scheduleRender();
 				return;
 			}
 
@@ -108,115 +160,114 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 				const toolUse = message.content as { id: string; name: string; input: Record<string, unknown> } | null;
 
 				if (text) {
+					streamingChunksRef.current = [];
 					streamingTextRef.current = "";
-					setMessages((prev) => {
-						const existing = prev.get(threadId) ?? [];
-						const lastMsg = existing[existing.length - 1];
-						if (lastMsg?.role === "assistant" && lastMsg.isStreaming) {
-							const updated = [...existing];
-							updated[updated.length - 1] = { ...lastMsg, content: text, isStreaming: false };
-							return new Map(prev).set(threadId, updated);
-						}
-						if (text.trim()) {
-							return new Map(prev).set(threadId, [
-								...existing,
-								{ id: crypto.randomUUID(), role: "assistant", content: text, createdAt: Date.now() },
-							]);
-						}
-						return prev;
-					});
+					const map = messagesRef.current;
+					const existing = map.get(threadId) ?? [];
+					const lastMsg = existing[existing.length - 1];
+					if (lastMsg?.role === "assistant" && lastMsg.isStreaming) {
+						const updated = existing.slice();
+						updated[updated.length - 1] = { ...lastMsg, content: text, isStreaming: false };
+						map.set(threadId, updated);
+					} else if (text.trim()) {
+						map.set(threadId, [
+							...existing,
+							{ id: crypto.randomUUID(), role: "assistant", content: text, createdAt: Date.now() },
+						]);
+					}
 				}
 
 				if (toolUse) {
-					setMessages((prev) => {
-						const existing = prev.get(threadId) ?? [];
-						return new Map(prev).set(threadId, [
-							...existing,
-							{
-								id: crypto.randomUUID(),
-								role: "tool",
-								content: "",
-								toolName: toolUse.name,
-								toolInput: toolUse.input,
-								isStreaming: true,
-							},
-						]);
-					});
+					const map = messagesRef.current;
+					const existing = map.get(threadId) ?? [];
+					map.set(threadId, [
+						...existing,
+						{
+							id: crypto.randomUUID(),
+							role: "tool",
+							content: "",
+							toolName: toolUse.name,
+							toolInput: toolUse.input,
+							isStreaming: true,
+						},
+					]);
 				}
+				flushRender();
 				return;
 			}
 
 			// User message (replays during session resume, or agent-delegated)
 			if (message.type === "user" && message.result) {
-				setMessages((prev) => {
-					const existing = prev.get(threadId) ?? [];
-					return new Map(prev).set(threadId, [
-						...existing,
-						{
-							id: crypto.randomUUID(),
-							role: "user",
-							content: message.result!,
-							...(message.isAgent ? { isAgent: true } : {}),
-						},
-					]);
-				});
+				const map = messagesRef.current;
+				const existing = map.get(threadId) ?? [];
+				map.set(threadId, [
+					...existing,
+					{
+						id: crypto.randomUUID(),
+						role: "user",
+						content: message.result!,
+						...(message.isAgent ? { isAgent: true } : {}),
+					},
+				]);
+				flushRender();
 				return;
 			}
 
 			// Result message
 			if (message.type === "result") {
-
+				streamingChunksRef.current = [];
 				streamingTextRef.current = "";
-				setMessages((prev) => {
-					const existing = prev.get(threadId) ?? [];
-					// Find the last assistant message and attach timing
-					const lastAssistantIdx = existing.findLastIndex((m) => m.role === "assistant");
-					const updated = existing.map((m, i) => {
-						if (m.isStreaming) {
-							return { ...m, isStreaming: false };
-						}
-						if (i === lastAssistantIdx && message.durationMs != null) {
-							return {
-								...m,
-								createdAt: m.createdAt || message.createdAt,
-								durationMs: message.durationMs,
-							};
-						}
-						return m;
-					});
-					return new Map(prev).set(threadId, updated);
+				const map = messagesRef.current;
+				const existing = map.get(threadId) ?? [];
+				const lastAssistantIdx = existing.findLastIndex((m) => m.role === "assistant");
+				const updated = existing.map((m, i) => {
+					if (m.isStreaming) {
+						return { ...m, isStreaming: false };
+					}
+					if (i === lastAssistantIdx && message.durationMs != null) {
+						return {
+							...m,
+							createdAt: m.createdAt || message.createdAt,
+							durationMs: message.durationMs,
+						};
+					}
+					return m;
 				});
+				map.set(threadId, updated);
+
 				// If user is viewing this thread, go idle; otherwise mark completed
 				setThreadStatuses((prev) => {
 					const next = new Map(prev);
 					next.set(threadId, activeThreadIdRef.current === threadId ? "idle" : "completed");
 					return next;
 				});
+				flushRender();
 				return;
 			}
 		},
-		[]
+		[scheduleRender, flushRender]
 	);
 
 	const handleQueryResult = useCallback(
 		(data: { threadId: string; success: boolean; error?: string }) => {
 			if (data.threadId === "__menu_new_thread__") return;
 
+			streamingChunksRef.current = [];
 			streamingTextRef.current = "";
 
-			setMessages((prev) => {
-				const existing = prev.get(data.threadId) ?? [];
-				let updated = existing.map((m) =>
-					m.isStreaming ? { ...m, isStreaming: false } : m
-				);
-				if (!data.success && data.error) {
-					updated = [
-						...updated,
-						{ id: crypto.randomUUID(), role: "assistant" as const, content: `Error: ${data.error}` },
-					];
-				}
-				return new Map(prev).set(data.threadId, updated);
-			});
+			const map = messagesRef.current;
+			const existing = map.get(data.threadId) ?? [];
+			let updated = existing.map((m) =>
+				m.isStreaming ? { ...m, isStreaming: false } : m
+			);
+			if (!data.success && data.error) {
+				updated = [
+					...updated,
+					{ id: crypto.randomUUID(), role: "assistant" as const, content: `Error: ${data.error}` },
+				];
+			}
+			map.set(data.threadId, updated);
+			flushRender();
 
 			// Mark completed if not currently viewing
 			setThreadStatuses((prev) => {
@@ -225,12 +276,14 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 				return next;
 			});
 		},
-		[]
+		[flushRender]
 	);
 
+	const audioCtxRef = useRef<AudioContext | null>(null);
 	const playDing = useCallback(() => {
 		try {
-			const ctx = new AudioContext();
+			if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+			const ctx = audioCtxRef.current;
 			const osc = ctx.createOscillator();
 			const gain = ctx.createGain();
 			osc.connect(gain);
@@ -244,6 +297,10 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 		} catch {}
 	}, []);
 
+	const handleContextUsage = useCallback((data: ContextUsage) => {
+		setContextUsages((prev) => new Map(prev).set(data.threadId, data));
+	}, []);
+
 	const handlePermissionRequest = useCallback((data: PermissionRequest) => {
 		setPermissionRequest(data);
 		if (data.threadId) {
@@ -253,25 +310,25 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 	}, [playDing]);
 
 	const sendMessage = useCallback(
-		(prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number) => {
+		(prompt: string | any[], model?: string, accessMode?: "full" | "restricted", images?: ImageAttachment[], thinkingBudget?: number, chatMode?: "chat" | "build" | "plan") => {
 			if (!rpc || !activeThreadId) return;
 			const textContent = typeof prompt === "string" ? prompt : prompt.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 			if (!textContent.trim() && (!images || images.length === 0)) return;
+			streamingChunksRef.current = [];
 			streamingTextRef.current = "";
 			// Mark as working immediately
 			setThreadStatuses((prev) => new Map(prev).set(activeThreadId, "working"));
 
-			setMessages((prev) => {
-				const existing = prev.get(activeThreadId) ?? [];
-				return new Map(prev).set(activeThreadId, [
-					...existing,
-					{ id: crypto.randomUUID(), role: "user", content: textContent, createdAt: Date.now(), ...(images && images.length > 0 ? { images } : {}) },
-				]);
-			});
+			const existing = messagesRef.current.get(activeThreadId) ?? [];
+			messagesRef.current.set(activeThreadId, [
+				...existing,
+				{ id: crypto.randomUUID(), role: "user", content: textContent, createdAt: Date.now(), ...(images && images.length > 0 ? { images } : {}) },
+			]);
+			flushRender();
 
-			rpc.send.sendMessage({ threadId: activeThreadId, prompt, model, accessMode, images, thinkingBudget });
+			rpc.send.sendMessage({ threadId: activeThreadId, prompt, model, accessMode, images, thinkingBudget, chatMode });
 		},
-		[rpc, activeThreadId]
+		[rpc, activeThreadId, flushRender]
 	);
 
 	const retryFromMessage = useCallback(
@@ -279,7 +336,7 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 			if (!rpc || !activeThreadId) return;
 			const currentStatus = threadStatuses.get(activeThreadId);
 			if (currentStatus === "working" || currentStatus === "pending_approval") return;
-			const currentMessages = messages.get(activeThreadId) ?? [];
+			const currentMessages = messagesRef.current.get(activeThreadId) ?? [];
 			const idx = currentMessages.findIndex((m) => m.id === messageId);
 			if (idx === -1) return;
 
@@ -300,7 +357,8 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 
 			// Truncate messages from this point
 			const truncated = currentMessages.slice(0, userMsgIdx);
-			setMessages((prev) => new Map(prev).set(activeThreadId, truncated));
+			messagesRef.current.set(activeThreadId, truncated);
+			flushRender();
 
 			// Persist truncated list (include images for user messages)
 			rpc.request.overwriteThreadMessages({ threadId: activeThreadId, messages: truncated.map((m: ChatMessage) => ({ id: m.id, role: m.role, content: m.content, toolName: m.toolName, toolInput: m.toolInput, createdAt: m.createdAt, durationMs: m.durationMs, ...(m.images ? { images: m.images } : {}) })) }).catch(() => {});
@@ -308,7 +366,7 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 			// Re-send the user message (with images if present)
 			sendMessage(userMsg.content, undefined, undefined, userMsg.images);
 		},
-		[rpc, activeThreadId, threadStatuses, messages, sendMessage]
+		[rpc, activeThreadId, threadStatuses, sendMessage, flushRender]
 	);
 
 	const interruptQuery = useCallback(() => {
@@ -338,9 +396,27 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 	const status = activeThreadId ? threadStatuses.get(activeThreadId) : undefined;
 	const isStreaming = status === "working" || status === "pending_approval";
 
+	// Derive context usage for active thread
+	const contextUsage = activeThreadId ? contextUsages.get(activeThreadId) ?? null : null;
+
+	// Cleanup messages for deleted threads to prevent memory leaks
+	const cleanupThread = useCallback((threadId: string) => {
+		messagesRef.current.delete(threadId);
+		loadedThreadsRef.current.delete(threadId);
+		setThreadStatuses((prev) => {
+			if (prev.has(threadId)) {
+				const next = new Map(prev);
+				next.delete(threadId);
+				return next;
+			}
+			return prev;
+		});
+	}, []);
+
 	return {
 		messages: threadMessages,
 		isStreaming,
+		contextUsage,
 		permissionRequest,
 		sendMessage,
 		retryFromMessage,
@@ -349,6 +425,8 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 		handleStreamChunk,
 		handleQueryResult,
 		handlePermissionRequest,
+		handleContextUsage,
 		getThreadStatus,
+		cleanupThread,
 	};
 }

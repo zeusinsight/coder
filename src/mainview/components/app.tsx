@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useThreads } from "../hooks/use-threads";
 import { useChat } from "../hooks/use-chat";
 import { Sidebar } from "./sidebar";
 import { ChatView } from "./chat-view";
+import { SettingsModal } from "./settings-modal";
+import { SearchOverlay } from "./search-overlay";
 import { onRpcMessage } from "../rpc-events";
 
 type Props = {
@@ -35,8 +37,19 @@ export function App({ electroview }: Props) {
 		handleStreamChunk,
 		handleQueryResult,
 		handlePermissionRequest,
+		handleContextUsage,
+		contextUsage,
 		getThreadStatus,
+		cleanupThread,
 	} = useChat(rpc, activeThreadId);
+
+	const [showSettings, setShowSettings] = useState(false);
+	const [showSearch, setShowSearch] = useState(false);
+
+	const handleDeleteThread = useCallback((id: string) => {
+		deleteThread(id);
+		cleanupThread(id);
+	}, [deleteThread, cleanupThread]);
 
 	useEffect(() => {
 		const unsubs = [
@@ -44,9 +57,10 @@ export function App({ electroview }: Props) {
 			onRpcMessage("onQueryResult", handleQueryResult),
 			onRpcMessage("onPermissionRequest", handlePermissionRequest),
 			onRpcMessage("onThreadUpdated", updateThreadInList),
+			onRpcMessage("onContextUsage", handleContextUsage),
 		];
 		return () => unsubs.forEach((fn) => fn());
-	}, [handleStreamChunk, handleQueryResult, handlePermissionRequest, updateThreadInList]);
+	}, [handleStreamChunk, handleQueryResult, handlePermissionRequest, updateThreadInList, handleContextUsage]);
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
@@ -57,6 +71,10 @@ export function App({ electroview }: Props) {
 				} else {
 					addProject();
 				}
+			}
+			if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+				e.preventDefault();
+				setShowSearch((s) => !s);
 			}
 		};
 		window.addEventListener("keydown", handler);
@@ -72,15 +90,17 @@ export function App({ electroview }: Props) {
 				onSelect={setActiveThreadId}
 				onAddProject={addProject}
 				onNewThread={createThreadInProject}
-				onDelete={deleteThread}
+				onDelete={handleDeleteThread}
 				onRename={renameThread}
 				onPin={pinThread}
+				onOpenSettings={() => setShowSettings(true)}
 			/>
 			<ChatView
 				rpc={rpc}
 				thread={activeThread}
 				messages={messages}
 				isStreaming={isStreaming}
+				contextUsage={contextUsage}
 				onSend={sendMessage}
 				onRetry={retryFromMessage}
 				onInterrupt={interruptQuery}
@@ -88,6 +108,16 @@ export function App({ electroview }: Props) {
 				onResolvePermission={resolvePermission}
 				onThreadUpdated={updateThreadInList}
 			/>
+			{showSettings && (
+				<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
+			)}
+			{showSearch && (
+				<SearchOverlay
+					rpc={rpc}
+					onSelect={setActiveThreadId}
+					onClose={() => setShowSearch(false)}
+				/>
+			)}
 		</div>
 	);
 }

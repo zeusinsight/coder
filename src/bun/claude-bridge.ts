@@ -1,8 +1,8 @@
 import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { join } from "path";
 import { homedir } from "os";
-import type { StreamMessage, PermissionRequest } from "./types";
-import { updateThread, getThread, saveMessages, loadMessages } from "./thread-store";
+import type { StreamMessage, PermissionRequest, ContextUsage } from "./types";
+import { updateThread, getThread, saveMessages, loadMessages, saveContextUsage } from "./thread-store";
 
 type SendToWebview = {
 	onStreamChunk: (data: { threadId: string; message: StreamMessage }) => void;
@@ -10,6 +10,7 @@ type SendToWebview = {
 	onQueryResult: (data: { threadId: string; success: boolean; error?: string; cost?: number }) => void;
 	onThreadUpdated: (thread: any) => void;
 	onThreadMessages: (data: { threadId: string; messages: ChatMessage[] }) => void;
+	onContextUsage: (data: ContextUsage) => void;
 };
 
 export type ChatMessage = {
@@ -67,7 +68,7 @@ function extractToolUseFromMessage(msg: SDKMessage): { id: string; name: string;
 	return null;
 }
 
-function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", thinkingBudget?: number): Record<string, unknown> {
+function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", thinkingBudget?: number, chatMode?: "chat" | "build" | "plan"): Record<string, unknown> {
 	const cleanEnv: Record<string, string> = {};
 	for (const [k, v] of Object.entries(process.env)) {
 		if (!k.startsWith("CLAUDE") && v !== undefined) cleanEnv[k] = v;
@@ -108,6 +109,12 @@ function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string
 
 	if (thinkingBudget) {
 		opts.thinkingBudget = thinkingBudget;
+	}
+
+	if (chatMode === "build") {
+		opts.systemPrompt = "You are in Build mode. Focus on writing and editing code. Be action-oriented: implement changes directly rather than explaining. Minimize explanations unless the user asks.";
+	} else if (chatMode === "plan") {
+		opts.systemPrompt = "You are in Plan mode. Do NOT write or edit any code. Instead, analyze the request, break it down into steps, identify relevant files and components, consider trade-offs, and present a clear implementation plan. Only plan, never implement.";
 	}
 
 	return opts;
@@ -223,6 +230,23 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 			}
 		}
 
+		// Extract context usage from assistant messages for real-time progress
+		if (message.type === "assistant") {
+			const usage = (message as any).message?.usage;
+			if (usage && usage.input_tokens) {
+				const ctx: ContextUsage = {
+					threadId,
+					inputTokens: usage.input_tokens ?? 0,
+					outputTokens: usage.output_tokens ?? 0,
+					cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+					cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+					contextWindow: 200000,
+				};
+				send.onContextUsage(ctx);
+				saveContextUsage(ctx);
+			}
+		}
+
 		// Finalize duration on result
 		if (message.type === "result") {
 			const lastAssistant = [...accumulated].reverse().find((m) => m.role === "assistant");
@@ -233,7 +257,7 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 
 		send.onStreamChunk({ threadId, message: streamMsg });
 
-		// On result, send query completion
+		// On result, send query completion + context usage
 		if (message.type === "result") {
 			const cost = (message as any).total_cost_usd;
 			send.onQueryResult({
@@ -242,6 +266,39 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 				error: (message as any).is_error ? streamMsg.result : undefined,
 				cost,
 			});
+
+			// Extract token usage — try modelUsage (camelCase SDK) then usage (snake_case raw API)
+			const modelUsage = (message as any).modelUsage as Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; contextWindow: number }> | undefined;
+			const rawUsage = (message as any).usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
+
+			if (modelUsage && Object.keys(modelUsage).length > 0) {
+				let inputTokens = 0;
+				let outputTokens = 0;
+				let cacheReadTokens = 0;
+				let cacheCreationTokens = 0;
+				let contextWindow = 200000;
+				for (const usage of Object.values(modelUsage)) {
+					inputTokens += usage.inputTokens ?? 0;
+					outputTokens += usage.outputTokens ?? 0;
+					cacheReadTokens += usage.cacheReadInputTokens ?? 0;
+					cacheCreationTokens += usage.cacheCreationInputTokens ?? 0;
+					if (usage.contextWindow) contextWindow = usage.contextWindow;
+				}
+				const ctx: ContextUsage = { threadId, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, contextWindow };
+				send.onContextUsage(ctx);
+				saveContextUsage(ctx);
+			} else if (rawUsage && (rawUsage.input_tokens || rawUsage.output_tokens)) {
+				const ctx: ContextUsage = {
+					threadId,
+					inputTokens: rawUsage.input_tokens ?? 0,
+					outputTokens: rawUsage.output_tokens ?? 0,
+					cacheReadTokens: rawUsage.cache_read_input_tokens ?? 0,
+					cacheCreationTokens: rawUsage.cache_creation_input_tokens ?? 0,
+					contextWindow: 200000,
+				};
+				send.onContextUsage(ctx);
+				saveContextUsage(ctx);
+			}
 		}
 	}
 
@@ -257,7 +314,7 @@ function extractTextFromPrompt(prompt: string | any[]): string {
 	return prompt.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 }
 
-export async function startQuery(threadId: string, prompt: string | any[], cwd: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", images?: { mediaType: string; dataUrl: string }[], thinkingBudget?: number) {
+export async function startQuery(threadId: string, prompt: string | any[], cwd: string, resumeSessionId?: string, model?: string, accessMode?: "full" | "restricted", images?: { mediaType: string; dataUrl: string }[], thinkingBudget?: number, chatMode?: "chat" | "build" | "plan") {
 	closeQuery(threadId);
 
 	// Save the user's message immediately
@@ -269,7 +326,7 @@ export async function startQuery(threadId: string, prompt: string | any[], cwd: 
 	}
 
 	try {
-		const opts = buildClaudeOpts(cwd, threadId, resumeSessionId, model, accessMode, thinkingBudget);
+		const opts = buildClaudeOpts(cwd, threadId, resumeSessionId, model, accessMode, thinkingBudget, chatMode);
 		await runQuery(threadId, prompt, opts);
 
 		// Auto-title from first prompt
@@ -284,7 +341,7 @@ export async function startQuery(threadId: string, prompt: string | any[], cwd: 
 		if (resumeSessionId) {
 			console.error("[bridge] Resume failed, retrying fresh:", err.message);
 			try {
-				const opts = buildClaudeOpts(cwd, threadId, undefined, model, accessMode, thinkingBudget);
+				const opts = buildClaudeOpts(cwd, threadId, undefined, model, accessMode, thinkingBudget, chatMode);
 				await runQuery(threadId, prompt, opts);
 			} catch (retryErr: any) {
 				console.error("[bridge] Retry error:", retryErr.message);

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, memo } from "react";
 import type { FileEntry } from "../hooks/use-file-mention";
 
 type Props = {
@@ -7,7 +7,7 @@ type Props = {
 	onSelect: (entry: FileEntry) => void;
 };
 
-export function FileMentionPopup({ items, selectedIndex, onSelect }: Props) {
+export const FileMentionPopup = memo(function FileMentionPopup({ items, selectedIndex, onSelect }: Props) {
 	const listRef = useRef<HTMLDivElement>(null);
 
 	// Scroll selected item into view
@@ -65,4 +65,4 @@ export function FileMentionPopup({ items, selectedIndex, onSelect }: Props) {
 			</div>
 		</div>
 	);
-}
+});

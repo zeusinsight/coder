@@ -272,11 +272,9 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			},
 			listBranches: async ({ cwd }) => {
 				try {
-					const { execSync } = await import("child_process");
-					// Fetch remotes in background to keep remote branches up-to-date
-					try {
-						execSync("git fetch --all --prune", { cwd, encoding: "utf-8", timeout: 15000, env: userShellEnv, stdio: "pipe" });
-					} catch {}
+					const { execSync, exec } = await import("child_process");
+					// Fire-and-forget fetch — never blocks listing, errors are silently ignored
+					exec("git fetch --all --prune", { cwd, encoding: "utf-8", timeout: 15000, env: userShellEnv }, () => {});
 					const current = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
 					const localRaw = execSync("git branch", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
 					const local = localRaw

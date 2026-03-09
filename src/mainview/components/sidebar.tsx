@@ -307,28 +307,25 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 								{/* Project name — truncates to make room */}
 								<span
 									onClick={() => toggleProject(project.cwd)}
-									className="text-white text-[15px] font-semibold truncate min-w-[40px] cursor-pointer"
+									className="text-white text-[15px] font-semibold truncate flex-1 min-w-0 cursor-pointer"
 									style={{ fontFamily: "'Geist', sans-serif" }}
 									title={project.name}
 								>
 									{project.name}
 								</span>
-								{/* Branch selector */}
-								<div className="flex-shrink-0">
+								{/* Right-aligned: branch + new thread, always in the same spot */}
+								<div className="flex items-center gap-1 flex-shrink-0">
 									<BranchSelector rpc={rpc} cwd={project.cwd} />
+									<button
+										onClick={() => onNewThread(project.cwd)}
+										className="invisible group-hover:visible flex items-center justify-center w-5 h-5 text-[#555] hover:text-[#aaa] transition-colors"
+										title="New thread"
+									>
+										<svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+											<path d="M6 2v8M2 6h8" />
+										</svg>
+									</button>
 								</div>
-								{/* Spacer */}
-								<div className="flex-1 min-w-0" />
-								{/* New thread button — always occupies space, invisible until hover */}
-								<button
-									onClick={() => onNewThread(project.cwd)}
-									className="invisible group-hover:visible flex items-center justify-center w-5 h-5 text-[#555] hover:text-[#aaa] transition-colors flex-shrink-0"
-									title="New thread"
-								>
-									<svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-										<path d="M6 2v8M2 6h8" />
-									</svg>
-								</button>
 							</div>
 
 							{/* Thread list */}

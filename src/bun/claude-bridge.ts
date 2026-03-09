@@ -95,6 +95,13 @@ function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string
 			send.onPermissionRequest({ id: permId, threadId, toolName, toolInput });
 			return new Promise<{ behavior: "allow"; updatedInput: Record<string, unknown> } | { behavior: "deny"; message: string }>((resolve) => {
 				pendingPermissions.set(permId, { resolve, toolInput });
+				// Auto-deny after 5 minutes to prevent memory leaks
+				setTimeout(() => {
+					if (pendingPermissions.has(permId)) {
+						pendingPermissions.delete(permId);
+						resolve({ behavior: "deny", message: "Permission request timed out" });
+					}
+				}, 5 * 60 * 1000);
 			});
 		},
 	};
@@ -157,7 +164,7 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 			type: message.type,
 			subtype: (message as any).subtype,
 			session_id: (message as any).session_id,
-			raw: message,
+			raw: undefined,
 		};
 
 		// Extract text for assistant messages

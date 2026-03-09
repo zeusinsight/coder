@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { Thread, ContextUsage, AppSettings } from "./types";
@@ -6,27 +6,82 @@ import type { Thread, ContextUsage, AppSettings } from "./types";
 const STORE_DIR = join(homedir(), ".coder");
 const STORE_PATH = join(STORE_DIR, "threads.json");
 const SETTINGS_PATH = join(STORE_DIR, "settings.json");
+const MESSAGES_DIR = join(STORE_DIR, "messages");
+const USAGE_DIR = join(STORE_DIR, "usage");
 
-// In-memory write-through cache — avoids re-reading & re-parsing JSON on every operation
+// Ensure all directories exist once at module load
+mkdirSync(STORE_DIR, { recursive: true });
+mkdirSync(MESSAGES_DIR, { recursive: true });
+mkdirSync(USAGE_DIR, { recursive: true });
+
+// ---------------------------------------------------------------------------
+// LRU Map — evicts least-recently-accessed entry when capacity is exceeded
+// ---------------------------------------------------------------------------
+class LRUMap<K, V> extends Map<K, V> {
+	constructor(private maxSize: number) {
+		super();
+	}
+
+	get(key: K): V | undefined {
+		if (!super.has(key)) return undefined;
+		const value = super.get(key)!;
+		// Move to end (most recently used)
+		super.delete(key);
+		super.set(key, value);
+		return value;
+	}
+
+	set(key: K, value: V): this {
+		if (super.has(key)) {
+			super.delete(key);
+		} else if (this.size >= this.maxSize) {
+			// Evict oldest (first key)
+			const oldest = this.keys().next().value;
+			if (oldest !== undefined) super.delete(oldest);
+		}
+		super.set(key, value);
+		return this;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Debounced async writes — updates cache immediately, coalesces disk I/O
+// ---------------------------------------------------------------------------
+const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const DEBOUNCE_MS = 200;
+
+function debouncedWrite(key: string, path: string, data: string) {
+	const existing = pendingTimers.get(key);
+	if (existing) clearTimeout(existing);
+	pendingTimers.set(
+		key,
+		setTimeout(() => {
+			pendingTimers.delete(key);
+			Bun.write(path, data).catch(() => {});
+		}, DEBOUNCE_MS),
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Thread store (write-through cache)
+// ---------------------------------------------------------------------------
 let cachedThreads: Thread[] | null = null;
 
 function ensureStore(): Thread[] {
 	if (cachedThreads !== null) return cachedThreads;
-	if (!existsSync(STORE_DIR)) {
-		mkdirSync(STORE_DIR, { recursive: true });
-	}
-	if (!existsSync(STORE_PATH)) {
-		writeFileSync(STORE_PATH, "[]");
+	try {
+		cachedThreads = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
+		return cachedThreads!;
+	} catch {
 		cachedThreads = [];
+		Bun.write(STORE_PATH, "[]").catch(() => {});
 		return [];
 	}
-	cachedThreads = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
-	return cachedThreads!;
 }
 
 function save(threads: Thread[]) {
 	cachedThreads = threads;
-	writeFileSync(STORE_PATH, JSON.stringify(threads, null, 2));
+	debouncedWrite("threads", STORE_PATH, JSON.stringify(threads, null, 2));
 }
 
 export function listThreads(): Thread[] {
@@ -70,28 +125,24 @@ export function getThread(id: string): Thread | null {
 	return ensureStore().find((t) => t.id === id) ?? null;
 }
 
-// Per-thread message persistence
-const MESSAGES_DIR = join(STORE_DIR, "messages");
-const messagesCache = new Map<string, any[]>();
-
-function ensureMessagesDir() {
-	if (!existsSync(MESSAGES_DIR)) {
-		mkdirSync(MESSAGES_DIR, { recursive: true });
-	}
-}
+// ---------------------------------------------------------------------------
+// Per-thread message persistence (LRU, max 20 threads in memory)
+// ---------------------------------------------------------------------------
+const messagesCache = new LRUMap<string, any[]>(20);
 
 export function saveMessages(threadId: string, messages: any[]) {
-	ensureMessagesDir();
 	messagesCache.set(threadId, messages);
-	writeFileSync(join(MESSAGES_DIR, `${threadId}.json`), JSON.stringify(messages));
+	debouncedWrite(
+		`msg:${threadId}`,
+		join(MESSAGES_DIR, `${threadId}.json`),
+		JSON.stringify(messages),
+	);
 }
 
 export function loadMessages(threadId: string): any[] {
 	const cached = messagesCache.get(threadId);
 	if (cached) return cached;
-	ensureMessagesDir();
 	const path = join(MESSAGES_DIR, `${threadId}.json`);
-	if (!existsSync(path)) return [];
 	try {
 		const parsed = JSON.parse(readFileSync(path, "utf-8"));
 		messagesCache.set(threadId, parsed);
@@ -101,28 +152,24 @@ export function loadMessages(threadId: string): any[] {
 	}
 }
 
-// Per-thread context usage persistence
-const USAGE_DIR = join(STORE_DIR, "usage");
-const usageCache = new Map<string, ContextUsage>();
-
-function ensureUsageDir() {
-	if (!existsSync(USAGE_DIR)) {
-		mkdirSync(USAGE_DIR, { recursive: true });
-	}
-}
+// ---------------------------------------------------------------------------
+// Per-thread context usage persistence (LRU, max 30 entries)
+// ---------------------------------------------------------------------------
+const usageCache = new LRUMap<string, ContextUsage>(30);
 
 export function saveContextUsage(data: ContextUsage) {
-	ensureUsageDir();
 	usageCache.set(data.threadId, data);
-	writeFileSync(join(USAGE_DIR, `${data.threadId}.json`), JSON.stringify(data));
+	debouncedWrite(
+		`usage:${data.threadId}`,
+		join(USAGE_DIR, `${data.threadId}.json`),
+		JSON.stringify(data),
+	);
 }
 
 export function loadContextUsage(threadId: string): ContextUsage | null {
 	const cached = usageCache.get(threadId);
 	if (cached) return cached;
-	ensureUsageDir();
 	const path = join(USAGE_DIR, `${threadId}.json`);
-	if (!existsSync(path)) return null;
 	try {
 		const parsed = JSON.parse(readFileSync(path, "utf-8"));
 		usageCache.set(threadId, parsed);
@@ -132,7 +179,9 @@ export function loadContextUsage(threadId: string): ContextUsage | null {
 	}
 }
 
+// ---------------------------------------------------------------------------
 // Search across all thread messages
+// ---------------------------------------------------------------------------
 export type SearchResult = {
 	threadId: string;
 	threadTitle: string;
@@ -210,22 +259,13 @@ export function searchMessages(query: string): SearchResult[] {
 	return results;
 }
 
+// ---------------------------------------------------------------------------
 // Global app settings persistence
+// ---------------------------------------------------------------------------
 let cachedSettings: AppSettings | null = null;
-
-function ensureStoreDir() {
-	if (!existsSync(STORE_DIR)) {
-		mkdirSync(STORE_DIR, { recursive: true });
-	}
-}
 
 export function loadSettings(): AppSettings {
 	if (cachedSettings !== null) return cachedSettings;
-	ensureStoreDir();
-	if (!existsSync(SETTINGS_PATH)) {
-		cachedSettings = {};
-		return {};
-	}
 	try {
 		cachedSettings = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
 		return cachedSettings!;
@@ -236,8 +276,7 @@ export function loadSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings): AppSettings {
-	ensureStoreDir();
 	cachedSettings = settings;
-	writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+	debouncedWrite("settings", SETTINGS_PATH, JSON.stringify(settings, null, 2));
 	return settings;
 }

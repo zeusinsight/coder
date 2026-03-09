@@ -679,7 +679,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 	}
 
 	return (
-		<div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#181818] chat-grain relative">
+		<div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#181818] relative">
 			{/* Top Bar */}
 			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e] electrobun-webkit-app-region-drag">
 				<div className="flex items-center gap-3 min-w-0">

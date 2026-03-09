@@ -271,7 +271,7 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 	return (
 		<div className="w-[280px] min-w-[280px] bg-[#1e1e1e] border-r border-[#2a2b2e] flex flex-col h-full select-none">
 			{/* Header with traffic light space */}
-			<div className="pl-[76px] pr-4 pt-[10px] h-[52px] flex items-center gap-2.5 electrobun-webkit-app-region-drag">
+			<div className="pl-[76px] pr-4 pt-[18px] h-[60px] flex items-center gap-2.5 electrobun-webkit-app-region-drag">
 				<span className="text-white font-bold text-[22px] tracking-tight" style={{ fontFamily: "'Geist', sans-serif" }}>
 					Coder
 				</span>

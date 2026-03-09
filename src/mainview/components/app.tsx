@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useThreads } from "../hooks/use-threads";
 import { useChat } from "../hooks/use-chat";
 import { Sidebar } from "./sidebar";
 import { ChatView } from "./chat-view";
-import { TerminalPanel, type TerminalPanelHandle } from "./terminal-panel";
-import { SettingsModal } from "./settings-modal";
-import { SearchOverlay } from "./search-overlay";
 import { onRpcMessage } from "../rpc-events";
 import { TerminalContext } from "../hooks/use-terminal";
+
+// Lazy-load heavy components that aren't needed at startup
+const TerminalPanel = lazy(() => import("./terminal-panel").then(m => ({ default: m.TerminalPanel })));
+const SettingsModal = lazy(() => import("./settings-modal").then(m => ({ default: m.SettingsModal })));
+const SearchOverlay = lazy(() => import("./search-overlay").then(m => ({ default: m.SearchOverlay })));
+
+type TerminalPanelHandle = import("./terminal-panel").TerminalPanelHandle;
 
 type Props = {
 	electroview: { rpc: any };
@@ -137,26 +141,32 @@ export function App({ electroview }: Props) {
 						onToggleTerminal={() => setShowTerminal((s) => !s)}
 						showTerminal={showTerminal}
 					/>
-					<TerminalPanel
-						ref={terminalRef}
-						rpc={rpc}
-						cwd={activeThread?.cwd ?? "/"}
-						isOpen={showTerminal}
-						height={terminalHeight}
-						onResize={setTerminalHeight}
-						onClose={() => setShowTerminal(false)}
-						onOpenExternal={(url) => rpc.send.openExternal({ url })}
-					/>
+					<Suspense fallback={null}>
+						<TerminalPanel
+							ref={terminalRef}
+							rpc={rpc}
+							cwd={activeThread?.cwd ?? "/"}
+							isOpen={showTerminal}
+							height={terminalHeight}
+							onResize={setTerminalHeight}
+							onClose={() => setShowTerminal(false)}
+							onOpenExternal={(url) => rpc.send.openExternal({ url })}
+						/>
+					</Suspense>
 				</div>
 				{showSettings && (
-					<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
+					<Suspense fallback={null}>
+						<SettingsModal rpc={rpc} onClose={() => setShowSettings(false)} />
+					</Suspense>
 				)}
 				{showSearch && (
-					<SearchOverlay
-						rpc={rpc}
-						onSelect={setActiveThreadId}
-						onClose={() => setShowSearch(false)}
-					/>
+					<Suspense fallback={null}>
+						<SearchOverlay
+							rpc={rpc}
+							onSelect={setActiveThreadId}
+							onClose={() => setShowSearch(false)}
+						/>
+					</Suspense>
 				)}
 			</div>
 		</TerminalContext.Provider>

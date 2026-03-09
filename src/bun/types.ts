@@ -19,7 +19,7 @@ export type StreamMessage = {
 	result?: string;
 	session_id?: string;
 	content?: unknown;
-	raw: unknown;
+	raw?: unknown;
 	createdAt?: number;
 	durationMs?: number;
 	isAgent?: boolean;

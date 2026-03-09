@@ -220,9 +220,36 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			getGitDiff: async ({ cwd }) => {
 				try {
 					const { execSync } = await import("child_process");
-					// Get list of changed files (unstaged + staged + untracked)
-					const statusOutput = execSync("git status --porcelain", { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+					const env = { ...userShellEnv };
+					// Get list of changed files
+					const statusOutput = execSync("git status --porcelain", { cwd, encoding: "utf-8", timeout: 5000, env }).trim();
 					if (!statusOutput) return { files: [] };
+
+					// Batch: get ALL diffs in two calls instead of per-file
+					let allStagedDiff = "";
+					let allUnstagedDiff = "";
+					try { allStagedDiff = execSync("git diff --cached", { cwd, encoding: "utf-8", timeout: 10000, env }); } catch {}
+					try { allUnstagedDiff = execSync("git diff", { cwd, encoding: "utf-8", timeout: 10000, env }); } catch {}
+
+					// Parse diffs into per-file maps
+					const parseDiffByFile = (diffOutput: string): Map<string, string> => {
+						const map = new Map<string, string>();
+						if (!diffOutput) return map;
+						const parts = diffOutput.split(/^diff --git /m).filter(Boolean);
+						for (const part of parts) {
+							const headerEnd = part.indexOf("\n");
+							const header = part.slice(0, headerEnd);
+							// Extract b/filepath from "a/foo b/foo"
+							const bMatch = header.match(/b\/(.+)$/);
+							if (bMatch) {
+								map.set(bMatch[1], "diff --git " + part);
+							}
+						}
+						return map;
+					};
+
+					const stagedMap = parseDiffByFile(allStagedDiff);
+					const unstagedMap = parseDiffByFile(allUnstagedDiff);
 
 					const files: { path: string; status: string; diff: string }[] = [];
 					const lines = statusOutput.split("\n").filter(Boolean);
@@ -238,19 +265,13 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 						else if (statusCode === "M" || statusCode === "MM" || statusCode === "AM") status = "modified";
 
 						let diff = "";
-						try {
-							if (statusCode === "??") {
-								// Untracked file - show full content as added
-								const content = execSync(`git diff --no-index /dev/null "${filePath}" || true`, { cwd, encoding: "utf-8", timeout: 5000 });
-								diff = content;
-							} else {
-								// Get combined diff (staged + unstaged)
-								const stagedDiff = execSync(`git diff --cached -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 5000 });
-								const unstagedDiff = execSync(`git diff -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 5000 });
-								diff = (stagedDiff + unstagedDiff).trim();
-							}
-						} catch {
-							diff = "(unable to read diff)";
+						if (statusCode === "??") {
+							// Untracked file - show content as added (still needs per-file call)
+							try {
+								diff = execSync(`git diff --no-index /dev/null "${filePath}" || true`, { cwd, encoding: "utf-8", timeout: 5000, env });
+							} catch { diff = "(unable to read diff)"; }
+						} else {
+							diff = ((stagedMap.get(filePath) ?? "") + "\n" + (unstagedMap.get(filePath) ?? "")).trim();
 						}
 
 						files.push({ path: filePath, status, diff });
@@ -273,22 +294,23 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			listBranches: async ({ cwd }) => {
 				try {
 					const { execSync, exec } = await import("child_process");
-					// Fire-and-forget fetch — never blocks listing, errors are silently ignored
-					exec("git fetch --all --prune", { cwd, encoding: "utf-8", timeout: 15000, env: userShellEnv }, () => {});
-					const current = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
-					const localRaw = execSync("git branch", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
-					const local = localRaw
-						.split("\n")
-						.map((b) => b.replace(/^\*?\s*/, "").trim())
-						.filter(Boolean);
-					let remote: string[] = [];
-					try {
-						const remoteRaw = execSync("git branch -r", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
-						remote = remoteRaw
-							.split("\n")
-							.map((b) => b.trim())
-							.filter((b) => b && !b.includes("->"));
-					} catch {}
+					const env = { ...userShellEnv };
+					// Fire-and-forget fetch — never blocks listing
+					exec("git fetch --all --prune", { cwd, encoding: "utf-8", timeout: 15000, env }, () => {});
+					// Single call: get current branch + all branches
+					const current = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env }).trim();
+					const allRaw = execSync("git branch -a", { cwd, encoding: "utf-8", timeout: 5000, env }).trim();
+					const local: string[] = [];
+					const remote: string[] = [];
+					for (const line of allRaw.split("\n")) {
+						const name = line.replace(/^\*?\s*/, "").trim();
+						if (!name || name.includes("->")) continue;
+						if (name.startsWith("remotes/")) {
+							remote.push(name.replace("remotes/", ""));
+						} else {
+							local.push(name);
+						}
+					}
 					return { current, local, remote };
 				} catch (e: any) {
 					return { current: "", local: [], remote: [], error: e.message ?? "Failed to list branches" };

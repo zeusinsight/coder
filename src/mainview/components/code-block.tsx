@@ -86,12 +86,22 @@ async function highlight(code: string, lang: string): Promise<string> {
 	return hl.codeToHtml(code, { lang: normalizedLang, theme: "github-dark-default" });
 }
 
-// LRU cache for shiki highlighting results
+// LRU cache for shiki highlighting results (move-to-front on access)
 const shikiCache = new Map<string, string>();
 const SHIKI_CACHE_MAX = 200;
+const SHIKI_CACHE_MAX_BYTES = 5 * 1024 * 1024; // 5MB total budget
+let shikiCacheBytes = 0;
+
+function fastHash(str: string): string {
+	let h = 0;
+	for (let i = 0; i < str.length; i++) {
+		h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+	}
+	return h.toString(36);
+}
 
 function getCacheKey(code: string, lang: string): string {
-	return `${lang}:${code}`;
+	return `${lang}:${fastHash(code)}:${code.length}`;
 }
 
 export const CodeBlock = memo(function CodeBlock({ code, language, onRunInTerminal }: Props) {
@@ -107,6 +117,9 @@ export const CodeBlock = memo(function CodeBlock({ code, language, onRunInTermin
 		const key = getCacheKey(code, language || "text");
 		const cached = shikiCache.get(key);
 		if (cached) {
+			// LRU: move to front by re-inserting
+			shikiCache.delete(key);
+			shikiCache.set(key, cached);
 			setHtml(cached);
 			return;
 		}
@@ -114,12 +127,21 @@ export const CodeBlock = memo(function CodeBlock({ code, language, onRunInTermin
 		highlight(code, language || "text")
 			.then((result) => {
 				if (!cancelled) {
-					// Evict oldest entries if cache is full
-					if (shikiCache.size >= SHIKI_CACHE_MAX) {
+					const resultBytes = result.length * 2; // rough UTF-16 estimate
+					// Evict until under budget (both count and bytes)
+					while (
+						(shikiCache.size >= SHIKI_CACHE_MAX || shikiCacheBytes + resultBytes > SHIKI_CACHE_MAX_BYTES) &&
+						shikiCache.size > 0
+					) {
 						const firstKey = shikiCache.keys().next().value;
-						if (firstKey) shikiCache.delete(firstKey);
+						if (firstKey) {
+							const evicted = shikiCache.get(firstKey);
+							if (evicted) shikiCacheBytes -= evicted.length * 2;
+							shikiCache.delete(firstKey);
+						}
 					}
 					shikiCache.set(key, result);
+					shikiCacheBytes += resultBytes;
 					setHtml(result);
 				}
 			})

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="228" fill="#181818"/>
+
+  <!-- Subtle inner border -->
+  <rect x="2" y="2" width="1020" height="1020" rx="226" fill="none" stroke="#2a2b2e" stroke-width="3"/>
+
+  <!-- Chevron > -->
+  <path
+    d="M280 340 L480 512 L280 684"
+    fill="none"
+    stroke="#e0e0e0"
+    stroke-width="64"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Underscore _ (blinking cursor) -->
+  <line
+    x1="560"
+    y1="684"
+    x2="744"
+    y2="684"
+    stroke="#e0e0e0"
+    stroke-width="64"
+    stroke-linecap="round"
+  />
+</svg>

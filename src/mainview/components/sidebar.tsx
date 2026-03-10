@@ -26,7 +26,7 @@ function DeleteConfirmDialog({ threadTitle, onConfirm, onCancel }: { threadTitle
 	return (
 		<div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/50" onClick={onCancel}>
 			<div
-				className="bg-[#1e1e1e] border border-[#333] rounded-lg p-5 w-[340px] shadow-2xl"
+				className="bg-[#1e1e1e] border border-[#2a2b2e] rounded-md p-5 w-[340px] shadow-2xl"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<h3 className="text-white text-[15px] font-semibold mb-2">Delete thread</h3>
@@ -36,13 +36,13 @@ function DeleteConfirmDialog({ threadTitle, onConfirm, onCancel }: { threadTitle
 				<div className="flex items-center justify-end gap-2">
 					<button
 						onClick={onCancel}
-						className="px-3 py-1.5 text-[13px] text-[#999] hover:text-white rounded border border-[#333] hover:border-[#555] transition-colors cursor-pointer"
+						className="px-3 py-1.5 text-[13px] text-[#999] hover:text-white rounded-md border border-[#333] hover:border-[#555] transition-colors cursor-pointer"
 					>
 						Cancel
 					</button>
 					<button
 						onClick={onConfirm}
-						className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-white bg-red-600 hover:bg-red-500 rounded transition-colors cursor-pointer"
+						className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-white bg-red-600 hover:bg-red-500 rounded-md transition-colors cursor-pointer"
 					>
 						Delete
 						<span className="flex items-center gap-0.5">
@@ -109,12 +109,16 @@ const ThreadItem = memo(function ThreadItem({
 }) {
 	return (
 		<div
-			className={`group/thread flex items-center px-3 h-[32px] cursor-pointer ${
+			className={`group/thread flex items-center px-3 h-[32px] cursor-pointer relative ${
 				isActive ? "bg-[#2a2b2e]" : "hover:bg-[#252525]"
 			}`}
 			onClick={() => onSelect(thread.id)}
 			onMouseEnter={() => onPreloadThread?.(thread.id)}
 		>
+			{/* Active indicator bar */}
+			{isActive && (
+				<span className="absolute left-0 top-[4px] bottom-[4px] w-[2px] bg-[#e0e0e0] rounded-r" />
+			)}
 			{/* Pin indicator */}
 			{thread.pinned && (
 				<svg className="w-3 h-3 text-[#666] flex-shrink-0 mr-1.5" viewBox="0 0 16 16" fill="currentColor">
@@ -271,9 +275,9 @@ export const Sidebar = memo(function Sidebar({ rpc, threads, activeThreadId, get
 	return (
 		<div className="w-[280px] min-w-[280px] bg-[#1e1e1e] border-r border-[#2a2b2e] flex flex-col h-full select-none">
 			{/* Header with traffic light space */}
-			<div className="pl-[76px] pr-4 pt-[18px] h-[60px] flex items-center gap-2.5 electrobun-webkit-app-region-drag">
+			<div className="pl-[76px] pr-4 pt-[18px] h-[60px] flex items-center gap-2.5 electrobun-webkit-app-region-drag" onDoubleClick={() => rpc.request.toggleMaximize({})}>
 				<span className="text-white font-bold text-[22px] tracking-tight" style={{ fontFamily: "'Geist', sans-serif" }}>
-					Coder
+					Koda
 				</span>
 				<span className="text-[10px] text-[#888] bg-[#2e2e2e] px-1.5 py-[2px] uppercase tracking-wider font-medium border border-[#3a3a3a]">
 					Alpha

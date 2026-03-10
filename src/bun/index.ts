@@ -358,6 +358,13 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			destroyTerminal: async ({ id }) => {
 				(await getPtyManager()).destroyTerminal(id);
 			},
+			toggleMaximize: () => {
+				if (mainWindow.isMaximized()) {
+					mainWindow.unmaximize();
+				} else {
+					mainWindow.maximize();
+				}
+			},
 			pickDirectory: async () => {
 				const paths = await Utils.openFileDialog({
 					startingFolder: process.env.HOME ?? "/",
@@ -398,7 +405,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 const url = await getMainViewUrl();
 
 const mainWindow = new BrowserWindow({
-	title: "Coder",
+	title: "Koda",
 	url,
 	frame: {
 		width: 1200,

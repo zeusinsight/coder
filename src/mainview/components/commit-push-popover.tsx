@@ -89,7 +89,7 @@ export function CommitPushPopover({ rpc, cwd, onClose }: Props) {
 	return (
 		<div
 			ref={ref}
-			className="absolute top-full right-0 mt-1 w-[380px] bg-[#1b1b1b] border border-[#333] rounded-lg shadow-2xl z-[200]"
+			className="absolute top-full right-0 mt-1 w-[380px] bg-[#1b1b1b] border border-[#2a2b2e] rounded-md shadow-2xl z-[200]"
 			onMouseDown={(e) => e.stopPropagation()}
 		>
 			<div className="p-4">

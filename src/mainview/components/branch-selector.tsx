@@ -221,7 +221,7 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 			{open && createPortal(
 				<div
 					ref={dropdownRef}
-					className="fixed w-[240px] bg-[#1e1e1e] border border-[#333] rounded-lg shadow-2xl z-[10000] overflow-hidden"
+					className="fixed w-[240px] bg-[#1e1e1e] border border-[#2a2b2e] rounded-md shadow-2xl z-[10000] overflow-hidden"
 					style={{ top: dropdownPos.top, left: dropdownPos.left }}
 				>
 					{/* Search / create input */}
@@ -233,7 +233,7 @@ export const BranchSelector = memo(function BranchSelector({ rpc, cwd }: Props) 
 							onChange={(e) => setQuery(e.target.value)}
 							onKeyDown={handleKeyDown}
 							placeholder="Switch or create branch..."
-							className="w-full bg-[#252525] border border-[#333] rounded px-2 py-1.5 text-[12px] text-white placeholder-[#555] outline-none focus:border-[#555]"
+							className="w-full bg-[#252525] border border-[#333] rounded-md px-2 py-1.5 text-[12px] text-white placeholder-[#555] outline-none focus:border-[#555]"
 							style={{ fontFamily: "'Geist Mono', monospace" }}
 						/>
 					</div>

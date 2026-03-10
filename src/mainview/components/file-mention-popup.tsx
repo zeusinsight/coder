@@ -22,7 +22,7 @@ export const FileMentionPopup = memo(function FileMentionPopup({ items, selected
 		<div className="absolute bottom-full left-0 right-0 mb-1 z-50">
 			<div
 				ref={listRef}
-				className="bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl max-h-[240px] overflow-y-auto"
+				className="bg-[#1b1b1b] border border-[#2a2b2e] rounded-md overflow-hidden shadow-xl max-h-[240px] overflow-y-auto"
 			>
 				{items.map((entry, i) => (
 					<button

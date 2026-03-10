@@ -39,7 +39,7 @@ export function SettingsModal({ rpc, onClose }: Props) {
 	return (
 		<div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/50" onClick={onClose}>
 			<div
-				className="bg-[#1e1e1e] border border-[#333] rounded-lg p-6 w-[420px] shadow-2xl"
+				className="bg-[#1e1e1e] border border-[#2a2b2e] rounded-md p-6 w-[420px] shadow-2xl"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<h3
@@ -67,7 +67,7 @@ export function SettingsModal({ rpc, onClose }: Props) {
 								onChange={(e) => setGroqApiKey(e.target.value)}
 								placeholder="gsk_..."
 								spellCheck={false}
-								className="w-full bg-[#2a2a2a] border border-[#444] rounded px-3 py-2 text-[13px] text-white placeholder-[#555] outline-none focus:border-[#666] transition-colors"
+								className="w-full bg-[#2a2a2a] border border-[#333] rounded-md px-3 py-2 text-[13px] text-white placeholder-[#555] outline-none focus:border-[#666] transition-colors"
 								style={{ fontFamily: "'Geist Mono', monospace" }}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleSave();
@@ -85,14 +85,14 @@ export function SettingsModal({ rpc, onClose }: Props) {
 				<div className="flex items-center justify-end gap-2 mt-6">
 					<button
 						onClick={onClose}
-						className="px-3 py-1.5 text-[13px] text-[#999] hover:text-white rounded border border-[#333] hover:border-[#555] transition-colors cursor-pointer"
+						className="px-3 py-1.5 text-[13px] text-[#999] hover:text-white rounded-md border border-[#333] hover:border-[#555] transition-colors cursor-pointer"
 					>
 						Cancel
 					</button>
 					<button
 						onClick={handleSave}
 						disabled={loading || saving}
-						className="px-4 py-1.5 text-[13px] text-white bg-[#333] hover:bg-[#444] rounded border border-[#555] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+						className="px-4 py-1.5 text-[13px] text-white bg-[#333] hover:bg-[#444] rounded-md border border-[#555] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						{saving ? "Saving..." : "Save"}
 					</button>

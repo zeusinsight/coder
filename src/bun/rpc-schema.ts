@@ -30,6 +30,7 @@ export type CoderRPC = {
 			// Terminal
 			createTerminal: { params: { id: string; cwd: string; cols: number; rows: number }; response: void };
 			destroyTerminal: { params: { id: string }; response: void };
+			toggleMaximize: { params: {}; response: void };
 		};
 		messages: {
 			sendMessage: { threadId: string; prompt: string | any[]; model?: string; accessMode?: "full" | "restricted"; images?: { mediaType: string; dataUrl: string }[]; thinkingBudget?: number; chatMode?: "chat" | "build" | "plan" };

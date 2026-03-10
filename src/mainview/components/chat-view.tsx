@@ -669,10 +669,15 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 	if (!thread) {
 		return (
 			<div className="flex-1 flex flex-col min-h-0 bg-[#181818]">
-				<div className="h-[52px] flex-shrink-0 electrobun-webkit-app-region-drag" />
+				<div className="h-[52px] flex-shrink-0 electrobun-webkit-app-region-drag" onDoubleClick={() => rpc.request.toggleMaximize({})} />
 				<div className="flex-1 flex flex-col items-center justify-center text-[#444]">
-					<div className="text-5xl mb-4 font-mono font-bold">{"</>"}</div>
-					<div className="text-lg font-semibold text-[#555]">Coder</div>
+					<svg className="w-16 h-16 mb-4" viewBox="0 0 1024 1024">
+						<rect width="1024" height="1024" rx="228" fill="#181818"/>
+						<rect x="2" y="2" width="1020" height="1020" rx="226" fill="none" stroke="#2a2b2e" strokeWidth="3"/>
+						<path d="M280 340 L480 512 L280 684" fill="none" stroke="#555" strokeWidth="64" strokeLinecap="round" strokeLinejoin="round"/>
+						<line x1="560" y1="684" x2="744" y2="684" stroke="#555" strokeWidth="64" strokeLinecap="round"/>
+					</svg>
+					<div className="text-lg font-semibold text-[#555]">Koda</div>
 					<div className="text-sm mt-1 text-[#444]">Select or create a project to start</div>
 				</div>
 			</div>
@@ -680,9 +685,9 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 	}
 
 	return (
-		<div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#181818] relative">
+		<div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#181818] relative overflow-hidden">
 			{/* Top Bar */}
-			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e] electrobun-webkit-app-region-drag">
+			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] bg-[#1e1e1e] electrobun-webkit-app-region-drag" onDoubleClick={() => rpc.request.toggleMaximize({})}>
 				<div className="flex items-center gap-3 min-w-0">
 					<span className="text-[#e0e0e0] text-sm font-medium truncate max-w-[400px]">
 						{thread.title}
@@ -752,8 +757,29 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 			<div className="flex-1 overflow-y-auto px-6 py-6 relative" ref={scrollContainerRef} onScroll={handleScroll}>
 				<div className="max-w-4xl mx-auto">
 					{messages.length === 0 && !isStreaming && (
-						<div className="h-full flex flex-col items-center justify-center text-[#444] text-sm py-20 gap-4">
-							<span>Send a message to start coding</span>
+						<div className="h-full flex flex-col items-center justify-center text-[#444] text-sm py-20 gap-6">
+							<span className="text-[#555] text-[15px]">Send a message to start coding</span>
+
+							{/* Keyboard shortcuts */}
+							<div className="flex items-center gap-6 text-[12px] text-[#444]" style={{ fontFamily: "'Geist', sans-serif" }}>
+								<span className="flex items-center gap-1.5">
+									<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded-md border border-[#333] bg-[#232428] text-[11px] text-[#666] font-mono">⌘K</kbd>
+									<span>Search</span>
+								</span>
+								<span className="flex items-center gap-1.5">
+									<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded-md border border-[#333] bg-[#232428] text-[11px] text-[#666] font-mono">⌘N</kbd>
+									<span>New thread</span>
+								</span>
+								<span className="flex items-center gap-1.5">
+									<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded-md border border-[#333] bg-[#232428] text-[11px] text-[#666] font-mono">⌘J</kbd>
+									<span>Terminal</span>
+								</span>
+								<span className="flex items-center gap-1.5">
+									<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded-md border border-[#333] bg-[#232428] text-[11px] text-[#666] font-mono">⇧Tab</kbd>
+									<span>Cycle mode</span>
+								</span>
+							</div>
+
 							{hasClaudeMd === false && selectedHarness === "claude" && (
 								<button
 									onClick={() => {

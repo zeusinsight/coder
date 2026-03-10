@@ -86,6 +86,8 @@ export function SearchOverlay({ rpc, onSelect, onClose }: Props) {
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopImmediatePropagation();
 				onClose();
 			} else if (e.key === "ArrowDown") {
 				e.preventDefault();
@@ -114,7 +116,7 @@ export function SearchOverlay({ rpc, onSelect, onClose }: Props) {
 			onClick={onClose}
 		>
 			<div
-				className="w-[580px] bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl overflow-hidden"
+				className="w-[580px] bg-[#1e1e1e] border border-[#2a2b2e] rounded-md shadow-2xl overflow-hidden"
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Search input */}
@@ -138,7 +140,7 @@ export function SearchOverlay({ rpc, onSelect, onClose }: Props) {
 							<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
 						</svg>
 					)}
-					<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded border border-[#444] bg-[#2a2a2a] text-[11px] text-[#666] font-mono leading-none flex-shrink-0">
+					<kbd className="inline-flex items-center justify-center h-5 px-1.5 rounded-md border border-[#444] bg-[#2a2a2a] text-[11px] text-[#666] font-mono leading-none flex-shrink-0">
 						esc
 					</kbd>
 				</div>
@@ -177,7 +179,7 @@ export function SearchOverlay({ rpc, onSelect, onClose }: Props) {
 										{getProjectName(result.cwd)}
 									</span>
 									{result.matchCount > 1 && (
-										<span className="flex-shrink-0 text-[10px] text-[#666] bg-[#2a2a2a] border border-[#3a3a3a] px-1.5 py-0.5 rounded-full">
+										<span className="flex-shrink-0 text-[10px] text-[#666] bg-[#2a2a2a] border border-[#3a3a3a] px-1.5 py-0.5 rounded-md">
 											{result.matchCount} matches
 										</span>
 									)}
@@ -220,16 +222,16 @@ export function SearchOverlay({ rpc, onSelect, onClose }: Props) {
 				{results.length > 0 && (
 					<div className="px-4 py-2 border-t border-[#222] flex items-center gap-3 text-[11px] text-[#444]" style={{ fontFamily: "'Geist', sans-serif" }}>
 						<span className="flex items-center gap-1">
-							<kbd className="inline-flex items-center justify-center h-4 w-4 rounded border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↑</kbd>
-							<kbd className="inline-flex items-center justify-center h-4 w-4 rounded border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↓</kbd>
+							<kbd className="inline-flex items-center justify-center h-4 w-4 rounded-md border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↑</kbd>
+							<kbd className="inline-flex items-center justify-center h-4 w-4 rounded-md border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↓</kbd>
 							navigate
 						</span>
 						<span className="flex items-center gap-1">
-							<kbd className="inline-flex items-center justify-center h-4 px-1 rounded border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↵</kbd>
+							<kbd className="inline-flex items-center justify-center h-4 px-1 rounded-md border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">↵</kbd>
 							open
 						</span>
 						<span className="flex items-center gap-1">
-							<kbd className="inline-flex items-center justify-center h-4 px-1 rounded border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">esc</kbd>
+							<kbd className="inline-flex items-center justify-center h-4 px-1 rounded-md border border-[#3a3a3a] bg-[#2a2a2a] text-[10px] text-[#555] font-mono">esc</kbd>
 							close
 						</span>
 					</div>

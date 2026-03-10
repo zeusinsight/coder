@@ -40,7 +40,7 @@ export function createTerminal(
 				...env,
 				TERM: "xterm-256color",
 				COLORTERM: "truecolor",
-				TERM_PROGRAM: "Coder",
+				TERM_PROGRAM: "Koda",
 				LANG: env.LANG || process.env.LANG || "en_US.UTF-8",
 			},
 		});

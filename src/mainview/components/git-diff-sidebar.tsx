@@ -84,7 +84,7 @@ export const GitDiffSidebar = memo(function GitDiffSidebar({ rpc, cwd, isOpen, o
 			}`}
 		>
 			{/* Header */}
-			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] flex-shrink-0 electrobun-webkit-app-region-drag">
+			<div className="flex items-center justify-between px-4 h-[52px] border-b border-[#2a2b2e] flex-shrink-0 electrobun-webkit-app-region-drag" onDoubleClick={() => rpc.request.toggleMaximize({})}>
 				<div className="flex items-center gap-2.5">
 					<svg className="w-4 h-4 text-[#999]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 						<path d="M12 2v6M12 12v2M4 2v2M4 8v6" />

@@ -149,6 +149,9 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 	const accumulated: ChatMessage[] = [];
 	const queryStartTime = Date.now();
 
+	// Track the latest per-message usage (accurate context fill level)
+	let lastMessageUsage: ContextUsage | null = null;
+
 	for await (const message of q) {
 		// Capture session ID from init message
 		if (message.type === "system" && (message as any).subtype === "init") {
@@ -238,6 +241,8 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 		}
 
 		// Extract context usage from assistant messages for real-time progress
+		// Each assistant message's usage.input_tokens = full prompt size for that API call
+		// (i.e. how much of the context window is filled by conversation history)
 		if (message.type === "assistant") {
 			const usage = (message as any).message?.usage;
 			if (usage && usage.input_tokens) {
@@ -247,8 +252,9 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 					outputTokens: usage.output_tokens ?? 0,
 					cacheReadTokens: usage.cache_read_input_tokens ?? 0,
 					cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
-					contextWindow: 200000,
+					contextWindow: lastMessageUsage?.contextWindow ?? 200000,
 				};
+				lastMessageUsage = ctx;
 				send.onContextUsage(ctx);
 				saveContextUsage(ctx);
 			}
@@ -274,37 +280,39 @@ async function runQuery(threadId: string, prompt: string | any[], opts: Record<s
 				cost,
 			});
 
-			// Extract token usage — try modelUsage (camelCase SDK) then usage (snake_case raw API)
+			// Extract the real context window size from modelUsage (per-model stats from SDK)
+			// Note: modelUsage token counts are CUMULATIVE across all API calls — not suitable
+			// for context fill level. We use them only for contextWindow and as a fallback.
 			const modelUsage = (message as any).modelUsage as Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; contextWindow: number }> | undefined;
-			const rawUsage = (message as any).usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
 
-			if (modelUsage && Object.keys(modelUsage).length > 0) {
-				let inputTokens = 0;
-				let outputTokens = 0;
-				let cacheReadTokens = 0;
-				let cacheCreationTokens = 0;
-				let contextWindow = 200000;
+			// Get the actual context window from the model
+			let contextWindow = 200000;
+			if (modelUsage) {
 				for (const usage of Object.values(modelUsage)) {
-					inputTokens += usage.inputTokens ?? 0;
-					outputTokens += usage.outputTokens ?? 0;
-					cacheReadTokens += usage.cacheReadInputTokens ?? 0;
-					cacheCreationTokens += usage.cacheCreationInputTokens ?? 0;
 					if (usage.contextWindow) contextWindow = usage.contextWindow;
 				}
-				const ctx: ContextUsage = { threadId, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, contextWindow };
+			}
+
+			if (lastMessageUsage) {
+				// We have accurate per-message data — just update the contextWindow
+				const ctx: ContextUsage = { ...lastMessageUsage, contextWindow };
 				send.onContextUsage(ctx);
 				saveContextUsage(ctx);
-			} else if (rawUsage && (rawUsage.input_tokens || rawUsage.output_tokens)) {
-				const ctx: ContextUsage = {
-					threadId,
-					inputTokens: rawUsage.input_tokens ?? 0,
-					outputTokens: rawUsage.output_tokens ?? 0,
-					cacheReadTokens: rawUsage.cache_read_input_tokens ?? 0,
-					cacheCreationTokens: rawUsage.cache_creation_input_tokens ?? 0,
-					contextWindow: 200000,
-				};
-				send.onContextUsage(ctx);
-				saveContextUsage(ctx);
+			} else {
+				// No per-message usage captured — fall back to result data
+				const rawUsage = (message as any).usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
+				if (rawUsage && (rawUsage.input_tokens || rawUsage.output_tokens)) {
+					const ctx: ContextUsage = {
+						threadId,
+						inputTokens: rawUsage.input_tokens ?? 0,
+						outputTokens: rawUsage.output_tokens ?? 0,
+						cacheReadTokens: rawUsage.cache_read_input_tokens ?? 0,
+						cacheCreationTokens: rawUsage.cache_creation_input_tokens ?? 0,
+						contextWindow,
+					};
+					send.onContextUsage(ctx);
+					saveContextUsage(ctx);
+				}
 			}
 		}
 	}

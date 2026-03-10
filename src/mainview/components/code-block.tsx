@@ -57,6 +57,9 @@ function getLabel(lang: string) {
 // Singleton highlighter — loads languages on demand, NOT all 300+ upfront
 let highlighterPromise: Promise<Highlighter> | null = null;
 const loadedLangs = new Set<string>();
+// Cap loaded grammars to avoid unbounded memory growth
+const MAX_LOADED_LANGS = 15;
+const langLoadOrder: string[] = [];
 
 function getHighlighter(): Promise<Highlighter> {
 	if (!highlighterPromise) {
@@ -68,15 +71,41 @@ function getHighlighter(): Promise<Highlighter> {
 	return highlighterPromise;
 }
 
+// Dispose and recreate highlighter to reclaim grammar memory
+async function recycleHighlighter(): Promise<Highlighter> {
+	const oldHl = highlighterPromise ? await highlighterPromise : null;
+	if (oldHl) oldHl.dispose();
+	loadedLangs.clear();
+	langLoadOrder.length = 0;
+	highlighterPromise = createHighlighter({
+		themes: ["github-dark-default"],
+		langs: [],
+	});
+	return highlighterPromise;
+}
+
 async function highlight(code: string, lang: string): Promise<string> {
 	const hl = await getHighlighter();
 	const normalizedLang = lang || "text";
 
 	// Lazy-load the language grammar if not yet loaded
 	if (normalizedLang !== "text" && !loadedLangs.has(normalizedLang)) {
+		// If we've hit the grammar cap, recycle the highlighter to free memory
+		if (loadedLangs.size >= MAX_LOADED_LANGS) {
+			const freshHl = await recycleHighlighter();
+			try {
+				await freshHl.loadLanguage(normalizedLang as any);
+				loadedLangs.add(normalizedLang);
+				langLoadOrder.push(normalizedLang);
+			} catch {
+				return freshHl.codeToHtml(code, { lang: "text", theme: "github-dark-default" });
+			}
+			return freshHl.codeToHtml(code, { lang: normalizedLang, theme: "github-dark-default" });
+		}
 		try {
 			await hl.loadLanguage(normalizedLang as any);
 			loadedLangs.add(normalizedLang);
+			langLoadOrder.push(normalizedLang);
 		} catch {
 			// Language not supported — fall back to text
 			return hl.codeToHtml(code, { lang: "text", theme: "github-dark-default" });
@@ -88,8 +117,8 @@ async function highlight(code: string, lang: string): Promise<string> {
 
 // LRU cache for shiki highlighting results (move-to-front on access)
 const shikiCache = new Map<string, string>();
-const SHIKI_CACHE_MAX = 200;
-const SHIKI_CACHE_MAX_BYTES = 5 * 1024 * 1024; // 5MB total budget
+const SHIKI_CACHE_MAX = 50;
+const SHIKI_CACHE_MAX_BYTES = 2 * 1024 * 1024; // 2MB total budget
 let shikiCacheBytes = 0;
 
 function fastHash(str: string): string {

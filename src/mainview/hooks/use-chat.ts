@@ -78,11 +78,26 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 		});
 	}, [activeThreadId]);
 
-	// Load saved messages when switching threads
+	// Load saved messages when switching threads (cap in-memory threads)
 	const loadedThreadsRef = useRef<Set<string>>(new Set());
+	const MAX_LOADED_THREADS = 5;
 	useEffect(() => {
 		if (!rpc || !activeThreadId) return;
 		if (loadedThreadsRef.current.has(activeThreadId)) return;
+
+		// Evict oldest loaded threads to cap memory usage
+		if (loadedThreadsRef.current.size >= MAX_LOADED_THREADS) {
+			for (const oldId of loadedThreadsRef.current) {
+				if (oldId === activeThreadId) continue;
+				// Don't evict threads that are currently working
+				const status = threadStatuses.get(oldId);
+				if (status === "working" || status === "pending_approval") continue;
+				messagesRef.current.delete(oldId);
+				loadedThreadsRef.current.delete(oldId);
+				if (loadedThreadsRef.current.size < MAX_LOADED_THREADS) break;
+			}
+		}
+
 		loadedThreadsRef.current.add(activeThreadId);
 		rpc.request.loadThreadMessages({ threadId: activeThreadId }).then((saved: ChatMessage[]) => {
 			if (saved && saved.length > 0) {
@@ -399,25 +414,22 @@ export function useChat(rpc: any, activeThreadId: string | null) {
 	// Derive context usage for active thread
 	const contextUsage = activeThreadId ? contextUsages.get(activeThreadId) ?? null : null;
 
-	// Preload thread messages on hover (before the thread is selected)
-	const preloadThread = useCallback((threadId: string) => {
-		if (!rpc || loadedThreadsRef.current.has(threadId)) return;
-		loadedThreadsRef.current.add(threadId);
-		rpc.request.loadThreadMessages({ threadId }).then((saved: ChatMessage[]) => {
-			if (saved && saved.length > 0) {
-				messagesRef.current.set(threadId, saved);
-			}
-		}).catch(() => {
-			// Remove from loaded set so it can be retried
-			loadedThreadsRef.current.delete(threadId);
-		});
-	}, [rpc]);
+	// Preload disabled to reduce memory — messages load on thread switch
+	const preloadThread = useCallback((_threadId: string) => {}, []);
 
 	// Cleanup messages for deleted threads to prevent memory leaks
 	const cleanupThread = useCallback((threadId: string) => {
 		messagesRef.current.delete(threadId);
 		loadedThreadsRef.current.delete(threadId);
 		setThreadStatuses((prev) => {
+			if (prev.has(threadId)) {
+				const next = new Map(prev);
+				next.delete(threadId);
+				return next;
+			}
+			return prev;
+		});
+		setContextUsages((prev) => {
 			if (prev.has(threadId)) {
 				const next = new Map(prev);
 				next.delete(threadId);

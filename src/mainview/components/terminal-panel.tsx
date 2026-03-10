@@ -164,7 +164,7 @@ export const TerminalPanel = memo(forwardRef<TerminalPanelHandle, Props>(functio
 				lineHeight: 1.35,
 				cursorBlink: true,
 				cursorStyle: "bar",
-				scrollback: 10000,
+				scrollback: 1000,
 				allowProposedApi: true,
 				convertEol: true,
 				macOptionIsMeta: true,

@@ -128,7 +128,7 @@ export function getThread(id: string): Thread | null {
 // ---------------------------------------------------------------------------
 // Per-thread message persistence (LRU, max 20 threads in memory)
 // ---------------------------------------------------------------------------
-const messagesCache = new LRUMap<string, any[]>(20);
+const messagesCache = new LRUMap<string, any[]>(5);
 
 export function saveMessages(threadId: string, messages: any[]) {
 	messagesCache.set(threadId, messages);
@@ -155,7 +155,7 @@ export function loadMessages(threadId: string): any[] {
 // ---------------------------------------------------------------------------
 // Per-thread context usage persistence (LRU, max 30 entries)
 // ---------------------------------------------------------------------------
-const usageCache = new LRUMap<string, ContextUsage>(30);
+const usageCache = new LRUMap<string, ContextUsage>(10);
 
 export function saveContextUsage(data: ContextUsage) {
 	usageCache.set(data.threadId, data);

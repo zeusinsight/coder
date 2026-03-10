@@ -7,8 +7,18 @@ import { BrowserWindow, BrowserView, Updater, Utils } from "electrobun/bun";
 import Electrobun, { ApplicationMenu } from "electrobun/bun";
 import type { CoderRPC } from "./rpc-schema";
 import * as store from "./thread-store";
-import * as bridge from "./claude-bridge";
-import * as ptyManager from "./pty-manager";
+// Lazy-load the Claude bridge (imports the heavy Agent SDK) — only needed when user sends a message
+let _bridge: typeof import("./claude-bridge") | null = null;
+async function getBridge() {
+	if (!_bridge) _bridge = await import("./claude-bridge");
+	return _bridge;
+}
+// Lazy-load PTY manager (loads native Rust bindings) — only needed when terminal opens
+let _ptyManager: typeof import("./pty-manager") | null = null;
+async function getPtyManager() {
+	if (!_ptyManager) _ptyManager = await import("./pty-manager");
+	return _ptyManager;
+}
 
 // Application menu — MUST be set before any await or BrowserWindow creation
 // (see https://github.com/blackboardsh/electrobun/issues/136)
@@ -43,13 +53,21 @@ ApplicationMenu.setApplicationMenu([
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
-// Resolve user's full shell PATH once at startup (Electrobun doesn't inherit it)
-import { execSync as execSyncImport } from "child_process";
+// Resolve user's full shell PATH asynchronously (Electrobun doesn't inherit it)
 let userShellEnv: Record<string, string> = { ...(process.env as Record<string, string>) };
-try {
-	const shellPath = execSyncImport("zsh -ilc 'echo $PATH'", { encoding: "utf-8", timeout: 5000 }).trim();
-	if (shellPath) userShellEnv.PATH = shellPath;
-} catch {}
+let shellEnvReady: Promise<void>;
+{
+	const { exec } = await import("child_process");
+	shellEnvReady = new Promise<void>((resolve) => {
+		exec("zsh -ilc 'echo $PATH'", { encoding: "utf-8", timeout: 5000 }, (err, stdout) => {
+			if (!err && stdout) {
+				const shellPath = stdout.trim();
+				if (shellPath) userShellEnv.PATH = shellPath;
+			}
+			resolve();
+		});
+	});
+}
 
 // Singleton guard for lzc install
 let lzcInstallPromise: Promise<boolean> | null = null;
@@ -131,8 +149,8 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				if (!thread) throw new Error("Thread not found");
 				return thread;
 			},
-			loadThreadMessages: ({ threadId }) => {
-				return bridge.getThreadMessages(threadId);
+			loadThreadMessages: async ({ threadId }) => {
+				return (await getBridge()).getThreadMessages(threadId);
 			},
 			overwriteThreadMessages: ({ threadId, messages }) => {
 				store.saveMessages(threadId, messages);
@@ -143,6 +161,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			getSettings: () => store.loadSettings(),
 			updateSettings: (settings) => store.saveSettings(settings),
 			generateCommitMessage: async ({ cwd }) => {
+				await shellEnvReady;
 				try {
 					const { execSync } = await import("child_process");
 					// Skip if working tree is clean
@@ -172,6 +191,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			commitAndPush: async ({ cwd, message }) => {
+				await shellEnvReady;
 				try {
 					const { execSync } = await import("child_process");
 					const env = { ...userShellEnv };
@@ -218,6 +238,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			getGitDiff: async ({ cwd }) => {
+				await shellEnvReady;
 				try {
 					const { execSync } = await import("child_process");
 					const env = { ...userShellEnv };
@@ -283,6 +304,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			getCurrentBranch: async ({ cwd }) => {
+				await shellEnvReady;
 				try {
 					const { execSync } = await import("child_process");
 					const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf-8", timeout: 5000, env: userShellEnv }).trim();
@@ -292,6 +314,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			listBranches: async ({ cwd }) => {
+				await shellEnvReady;
 				try {
 					const { execSync, exec } = await import("child_process");
 					const env = { ...userShellEnv };
@@ -317,6 +340,7 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			switchBranch: async ({ cwd, branch, create }) => {
+				await shellEnvReady;
 				try {
 					const { execSync } = await import("child_process");
 					const cmd = create ? `git switch -c ${JSON.stringify(branch)}` : `git switch ${JSON.stringify(branch)}`;
@@ -327,11 +351,12 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 				}
 			},
 			searchMessages: ({ query }) => store.searchMessages(query),
-			createTerminal: ({ id, cwd, cols, rows }) => {
-				ptyManager.createTerminal(id, cwd, cols, rows, userShellEnv);
+			createTerminal: async ({ id, cwd, cols, rows }) => {
+				await shellEnvReady;
+				(await getPtyManager()).createTerminal(id, cwd, cols, rows, userShellEnv);
 			},
-			destroyTerminal: ({ id }) => {
-				ptyManager.destroyTerminal(id);
+			destroyTerminal: async ({ id }) => {
+				(await getPtyManager()).destroyTerminal(id);
 			},
 			pickDirectory: async () => {
 				const paths = await Utils.openFileDialog({
@@ -345,25 +370,26 @@ const rpc = BrowserView.defineRPC<CoderRPC>({
 			},
 		},
 		messages: {
-			sendMessage: ({ threadId, prompt, model, accessMode, images, thinkingBudget, chatMode }) => {
+			sendMessage: async ({ threadId, prompt, model, accessMode, images, thinkingBudget, chatMode }) => {
 				const thread = store.getThread(threadId);
 				if (!thread) return;
-				bridge.startQuery(threadId, prompt, thread.cwd, thread.sessionId, model, accessMode, images, thinkingBudget, chatMode);
+				await shellEnvReady;
+				(await getBridge()).startQuery(threadId, prompt, thread.cwd, thread.sessionId, model, accessMode, images, thinkingBudget, chatMode);
 			},
-			interruptQuery: ({ threadId }) => {
-				bridge.interruptQuery(threadId);
+			interruptQuery: async ({ threadId }) => {
+				(await getBridge()).interruptQuery(threadId);
 			},
-			resolvePermission: ({ id, allow, updatedInput }) => {
-				bridge.resolvePermission(id, allow, updatedInput);
+			resolvePermission: async ({ id, allow, updatedInput }) => {
+				(await getBridge()).resolvePermission(id, allow, updatedInput);
 			},
 			openExternal: ({ url }) => {
 				Utils.openExternal(url);
 			},
-			writeTerminal: ({ id, data }) => {
-				ptyManager.writeTerminal(id, data);
+			writeTerminal: async ({ id, data }) => {
+				(await getPtyManager()).writeTerminal(id, data);
 			},
-			resizeTerminal: ({ id, cols, rows }) => {
-				ptyManager.resizeTerminal(id, cols, rows);
+			resizeTerminal: async ({ id, cols, rows }) => {
+				(await getPtyManager()).resizeTerminal(id, cols, rows);
 			},
 		},
 	},
@@ -386,20 +412,22 @@ const mainWindow = new BrowserWindow({
 
 // Wire bridge sender to RPC
 const webviewRpc = mainWindow.webview.rpc!;
-bridge.setSender({
-	onStreamChunk: (data) => webviewRpc.send.onStreamChunk(data),
-	onPermissionRequest: (data) => webviewRpc.send.onPermissionRequest(data),
-	onQueryResult: (data) => webviewRpc.send.onQueryResult(data),
-	onThreadUpdated: (data) => webviewRpc.send.onThreadUpdated(data),
-	onThreadMessages: (data) => webviewRpc.send.onThreadMessages(data),
-	onContextUsage: (data) => webviewRpc.send.onContextUsage(data),
-});
+// Defer bridge sender setup — will be ready before any query starts
+const bridgeSender = {
+	onStreamChunk: (data: any) => webviewRpc.send.onStreamChunk(data),
+	onPermissionRequest: (data: any) => webviewRpc.send.onPermissionRequest(data),
+	onQueryResult: (data: any) => webviewRpc.send.onQueryResult(data),
+	onThreadUpdated: (data: any) => webviewRpc.send.onThreadUpdated(data),
+	onThreadMessages: (data: any) => webviewRpc.send.onThreadMessages(data),
+	onContextUsage: (data: any) => webviewRpc.send.onContextUsage(data),
+};
+getBridge().then((b) => b.setSender(bridgeSender));
 
-ptyManager.setSender({
-	onTerminalData: (data) => webviewRpc.send.onTerminalData(data),
-	onTerminalExit: (data) => webviewRpc.send.onTerminalExit(data),
-	onTerminalTitle: (data) => webviewRpc.send.onTerminalTitle(data),
-});
+getPtyManager().then((pm) => pm.setSender({
+	onTerminalData: (data: any) => webviewRpc.send.onTerminalData(data),
+	onTerminalExit: (data: any) => webviewRpc.send.onTerminalExit(data),
+	onTerminalTitle: (data: any) => webviewRpc.send.onTerminalTitle(data),
+}));
 
 Electrobun.events.on("application-menu-clicked", (e) => {
 	if (e.data.action === "new-thread") {

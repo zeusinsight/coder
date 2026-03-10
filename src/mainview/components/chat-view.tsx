@@ -118,7 +118,7 @@ function ThinkingSelector({ selectedModel, thinkingLevel, onSelect }: { selected
 			</button>
 
 			{open && (
-				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
+				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-md overflow-hidden shadow-xl whitespace-nowrap">
 					{THINKING_LEVELS.map((level) => {
 						return (
 							<button
@@ -205,7 +205,7 @@ function ModeSelector({ chatMode, onSelect }: { chatMode: ChatMode; onSelect: (m
 			</button>
 
 			{open && (
-				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
+				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-md overflow-hidden shadow-xl whitespace-nowrap">
 					{CHAT_MODES.map((mode) => {
 						const desc = mode.id === "chat" ? "General conversation" : mode.id === "build" ? "Write & edit code" : "Plan without coding";
 						return (
@@ -261,7 +261,7 @@ function HarnessDropdown({ selected, onSelect }: { selected: string; onSelect: (
 			</button>
 
 			{open && (
-				<div className="absolute bottom-full left-0 mb-2 w-[180px] bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl">
+				<div className="absolute bottom-full left-0 mb-2 w-[180px] bg-[#1b1b1b] border border-[#333] rounded-md overflow-hidden shadow-xl">
 					{HARNESSES.map((h) => (
 						<button
 							key={h.id}
@@ -318,7 +318,7 @@ function ModelSelector({ selectedModel, onSelect }: { selectedModel: string; onS
 			</button>
 
 			{open && (
-				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-lg overflow-hidden shadow-xl whitespace-nowrap">
+				<div className="absolute bottom-full left-0 mb-2 bg-[#1b1b1b] border border-[#333] rounded-md overflow-hidden shadow-xl whitespace-nowrap">
 					{CLAUDE_MODELS.map((m) => (
 						<button
 							key={m.id}
@@ -345,16 +345,17 @@ function ModelSelector({ selectedModel, onSelect }: { selectedModel: string; onS
 function ContextBar({ usage }: { usage: import("../../bun/types").ContextUsage }) {
 	const total = usage.inputTokens + usage.outputTokens;
 	const pct = Math.min(Math.round((total / usage.contextWindow) * 100), 100);
-	const blocks = 10;
-	const filled = Math.round((pct / 100) * blocks);
-	const bar = "▰".repeat(filled) + "▱".repeat(blocks - filled);
-	const color = pct >= 80 ? "text-red-400" : pct >= 60 ? "text-orange-400" : "text-[#666]";
+	const fillColor = pct >= 80 ? "#f87171" : pct >= 60 ? "#fb923c" : "#555";
+	const textColor = pct >= 80 ? "text-red-400" : pct >= 60 ? "text-orange-400" : "text-[#666]";
 	const totalK = (total / 1000).toFixed(0);
 	const windowK = (usage.contextWindow / 1000).toFixed(0);
 
 	return (
-		<span className={`flex items-center gap-1.5 text-[11px] font-mono ${color}`} title={`${totalK}k / ${windowK}k tokens (${pct}%)`}>
-			<span className="tracking-tight">{bar}</span>
+		<span className={`flex items-center gap-1.5 text-[11px] font-mono ${textColor}`} title={`${totalK}k / ${windowK}k tokens (${pct}%)`}>
+			<svg className="w-[60px] h-[6px]" viewBox="0 0 60 6" fill="none">
+				<rect x="0" y="0" width="60" height="6" rx="1" fill="#2a2b2e" />
+				<rect x="0" y="0" width={Math.round((pct / 100) * 60)} height="6" rx="1" fill={fillColor} />
+			</svg>
 			<span>{pct}%</span>
 		</span>
 	);
@@ -765,7 +766,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 											rpc?.request.checkFileExists({ cwd: thread!.cwd, path: "CLAUDE.md" }).then((exists: boolean) => setHasClaudeMd(exists)).catch(() => {});
 										}, 5000);
 									}}
-									className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#999] border border-[#333] rounded-lg hover:text-white hover:border-[#555] hover:bg-[#232428] transition-colors cursor-pointer"
+									className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#999] border border-[#333] rounded-md hover:text-white hover:border-[#555] hover:bg-[#232428] transition-colors cursor-pointer"
 								>
 									<svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 										<path d="M8 2v12M5 5l3-3 3 3" />
@@ -810,7 +811,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 					<div className="sticky bottom-4 flex justify-center pointer-events-none">
 						<button
 							onClick={scrollToBottom}
-							className="pointer-events-auto bg-[#232428] border border-[#2a2b2e] rounded-full px-4 py-2 text-[13px] text-[#999] hover:text-white hover:bg-[#2a2b2e] transition-colors cursor-pointer shadow-lg flex items-center gap-2"
+							className="pointer-events-auto bg-[#232428] border border-[#2a2b2e] rounded-md px-4 py-2 text-[13px] text-[#999] hover:text-white hover:bg-[#2a2b2e] transition-colors cursor-pointer shadow-lg flex items-center gap-2"
 						>
 							<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 								<path d="M8 3v10M4 9l4 4 4-4" />
@@ -839,8 +840,7 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 			<div className="px-6 pb-12">
 				<div className="max-w-4xl mx-auto">
 					<div
-						className="bg-[#1b1b1b] rounded-2xl"
-						style={{ boxShadow: "0 -4px 20px rgba(0, 0, 0, 0.15), 0 -8px 40px rgba(0, 0, 0, 0.12), 0 -16px 80px rgba(0, 0, 0, 0.08)" }}
+						className="bg-[#1b1b1b] rounded-md"
 						onDrop={handleDrop}
 						onDragOver={(e) => e.preventDefault()}
 					>
@@ -907,10 +907,10 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 							<div className="flex items-center gap-2 px-5 pb-2">
 								{images.map((img) => (
 									<div key={img.id} className="relative group/thumb">
-										<img src={img.dataUrl} alt="" className="w-16 h-16 object-cover rounded-lg border border-[#2a2b2e]" />
+										<img src={img.dataUrl} alt="" className="w-16 h-16 object-cover rounded-md border border-[#2a2b2e]" />
 										<button
 											onClick={() => setImages((prev) => prev.filter((i) => i.id !== img.id))}
-											className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#333] border border-[#555] rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer hover:bg-[#555]"
+											className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#333] border border-[#555] rounded-md flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer hover:bg-[#555]"
 										>
 											<svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
 												<path d="M4 4l8 8M12 4l-8 8" />
@@ -982,9 +982,9 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 							{isStreaming ? (
 								<button
 									onClick={onInterrupt}
-									className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors cursor-pointer"
+									className="w-8 h-8 rounded-md bg-gradient-to-b from-[#e0e0e0] to-[#c0c0c0] flex items-center justify-center hover:from-white hover:to-[#d0d0d0] transition-all cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.3)] active:shadow-[0_0px_1px_rgba(0,0,0,0.3)] active:translate-y-[1px]"
 								>
-									<svg className="w-3 h-3" viewBox="0 0 12 12" fill="white">
+									<svg className="w-3 h-3" viewBox="0 0 12 12" fill="#1b1b1b">
 										<rect x="2.5" y="2.5" width="7" height="7" rx="1" />
 									</svg>
 								</button>
@@ -992,10 +992,10 @@ export function ChatView({ rpc, thread, messages, isStreaming, contextUsage, onS
 								<button
 									onClick={handleSend}
 									disabled={!input.trim()}
-									className="w-8 h-8 rounded-full bg-[#4e4e4e] flex items-center justify-center hover:bg-[#5a5a5a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+									className="w-8 h-8 rounded-md bg-gradient-to-b from-[#e0e0e0] to-[#c0c0c0] flex items-center justify-center hover:from-white hover:to-[#d0d0d0] transition-all disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.3)] active:shadow-[0_0px_1px_rgba(0,0,0,0.3)] active:translate-y-[1px]"
 								>
-									<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="#d9d9d9">
-										<path d="M3 13V3l10 5z" />
+									<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="#1b1b1b">
+										<path d="M8 2l6 6H9v6H7V8H2z" />
 									</svg>
 								</button>
 							)}
@@ -1048,25 +1048,87 @@ function groupToolMessages(messages: ChatMessage[]): GroupedItem[] {
 	return result;
 }
 
+const TOOL_ICON_MAP: Record<string, JSX.Element> = {
+	Bash: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M4 5l3 3-3 3" /><path d="M9 11h3" />
+		</svg>
+	),
+	Read: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M3 2h7l3 3v9H3V2z" /><path d="M6 8h4M6 11h2" />
+		</svg>
+	),
+	Write: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M3 2h7l3 3v9H3V2z" /><path d="M8 7v4M6 9h4" />
+		</svg>
+	),
+	Edit: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M11 2l3 3-9 9H2v-3z" />
+		</svg>
+	),
+	Glob: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<circle cx="7" cy="7" r="4" /><path d="M12 12l-2.5-2.5" />
+		</svg>
+	),
+	Grep: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<circle cx="7" cy="7" r="4" /><path d="M12 12l-2.5-2.5" /><path d="M5.5 7h3" />
+		</svg>
+	),
+	WebFetch: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<circle cx="8" cy="8" r="6" /><path d="M2 8h12" /><ellipse cx="8" cy="8" rx="3" ry="6" />
+		</svg>
+	),
+	WebSearch: (
+		<svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<circle cx="7" cy="7" r="4" /><path d="M12 12l-2.5-2.5" /><circle cx="7" cy="7" r="1.5" />
+		</svg>
+	),
+};
+
 const ToolCallGroup = memo(function ToolCallGroup({ tools }: { tools: ChatMessage[] }) {
 	const [expanded, setExpanded] = useState(false);
 
+	const uniqueToolNames = useMemo(() => {
+		const seen = new Set<string>();
+		for (const t of tools) {
+			if (t.toolName) seen.add(t.toolName);
+		}
+		return Array.from(seen);
+	}, [tools]);
+
 	return (
 		<div className="my-5">
-			<div className="bg-[#232428] rounded-lg border border-[#2a2b2e] overflow-hidden">
+			<div className="bg-[#232428] rounded-md border border-[#2a2b2e] overflow-hidden">
 				<button
 					onClick={() => setExpanded(!expanded)}
 					className="w-full flex items-center gap-2.5 px-5 py-3 text-[13px] text-[#777] hover:bg-[#282930] cursor-pointer transition-colors"
 				>
 					<svg
-						className={`w-2.5 h-2.5 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
-						viewBox="0 0 8 10"
-						fill="currentColor"
+						className={`w-3 h-3 transition-transform flex-shrink-0 ${expanded ? "rotate-90" : ""}`}
+						viewBox="0 0 16 16"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
 					>
-						<path d="M1 0l6 5-6 5z" />
+						<path d="M6 4l4 4-4 4" />
 					</svg>
 					<span className="uppercase tracking-wider font-medium">
 						Tool Calls ({tools.length})
+					</span>
+					<span className="flex items-center gap-1.5 ml-1 text-[#555]">
+						{uniqueToolNames.map((name) => (
+							<span key={name} title={name}>
+								{TOOL_ICON_MAP[name] ?? null}
+							</span>
+						))}
 					</span>
 				</button>
 				{expanded && (
@@ -1074,7 +1136,7 @@ const ToolCallGroup = memo(function ToolCallGroup({ tools }: { tools: ChatMessag
 						{tools.map((tool) => (
 							<div key={tool.id}>
 								<div className="flex items-center gap-3 py-1">
-									<span className="w-[6px] h-[6px] rounded-full bg-[#555] flex-shrink-0" />
+									<span className="w-4 h-4 text-[#555] flex-shrink-0">{TOOL_ICON_MAP[tool.toolName ?? ""] ?? <span className="block w-[6px] h-[6px] rounded-full bg-[#555] mt-[5px] ml-[5px]" />}</span>
 									<span className="text-[#888] text-[13px] font-mono">
 										<span className="text-[#999]">{formatToolLabel(tool.toolName ?? "")}</span>
 										{tool.toolInput && Object.keys(tool.toolInput).length > 0 && (

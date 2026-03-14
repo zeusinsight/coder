@@ -5,3 +5,4 @@ bun.lock
 .DS_Store
 *.env
 .env.*
+artifacts/

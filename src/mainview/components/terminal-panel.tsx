@@ -221,11 +221,16 @@ export const TerminalPanel = memo(forwardRef<TerminalPanelHandle, Props>(functio
 			other.containerEl.style.display = id === activeTabId ? "" : "none";
 		}
 
-		// Focus + refit active terminal
+		// Refit active terminal, only steal focus if terminal area already has it
 		if (inst.initialized) {
 			requestAnimationFrame(() => {
 				try { inst!.fitAddon.fit(); } catch {}
-				inst!.terminal.focus();
+				const active = document.activeElement;
+				const isTerminalFocused = active && inst!.terminal.element?.contains(active);
+				const isChatFocused = active?.tagName === "TEXTAREA" || active?.tagName === "INPUT";
+				if (!isChatFocused || isTerminalFocused) {
+					inst!.terminal.focus();
+				}
 			});
 		}
 	}, [isOpen, activeTabId, rpc, onOpenExternal]);

@@ -1,19 +1,27 @@
 import { useState, useEffect } from "react";
 import type { AppSettings } from "../../bun/types";
+import { HARNESSES, CLAUDE_MODELS } from "./chat-toolbar-selectors";
 
 type Props = {
 	rpc: any;
 	onClose: () => void;
 };
 
+// Models available per harness id (only unlocked harnesses with real model lists)
+const HARNESS_MODELS: Record<string, { id: string; label: string }[]> = {
+	claude: CLAUDE_MODELS.map(({ id, label }) => ({ id, label })),
+};
+
 export function SettingsModal({ rpc, onClose }: Props) {
 	const [groqApiKey, setGroqApiKey] = useState("");
+	const [defaultModels, setDefaultModels] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 
 	useEffect(() => {
 		rpc.request.getSettings({}).then((settings: AppSettings) => {
 			setGroqApiKey(settings.groqApiKey ?? "");
+			setDefaultModels(settings.defaultModels ?? {});
 			setLoading(false);
 		});
 	}, [rpc]);
@@ -30,16 +38,24 @@ export function SettingsModal({ rpc, onClose }: Props) {
 		setSaving(true);
 		const settings: AppSettings = {
 			groqApiKey: groqApiKey.trim() || undefined,
+			defaultModels: Object.keys(defaultModels).length > 0 ? defaultModels : undefined,
 		};
 		await rpc.request.updateSettings(settings);
 		setSaving(false);
 		onClose();
 	};
 
+	const setDefaultModel = (harnessId: string, modelId: string) => {
+		setDefaultModels((prev) => ({ ...prev, [harnessId]: modelId }));
+	};
+
+	// Unlocked harnesses that have model options
+	const configurableHarnesses = HARNESSES.filter((h) => !h.locked && HARNESS_MODELS[h.id]);
+
 	return (
 		<div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/50" onClick={onClose}>
 			<div
-				className="bg-[#1e1e1e] border border-[#2a2b2e] rounded-md p-6 w-[420px] shadow-2xl"
+				className="bg-[#1e1e1e] border border-[#2a2b2e] rounded-md p-6 w-[460px] shadow-2xl"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<h3
@@ -52,7 +68,58 @@ export function SettingsModal({ rpc, onClose }: Props) {
 				{loading ? (
 					<div className="text-[#666] text-[13px] py-4 text-center">Loading...</div>
 				) : (
-					<div className="space-y-4">
+					<div className="space-y-6">
+						{/* Default Models */}
+						<div>
+							<label
+								className="block text-[13px] text-[#999] mb-3 font-medium"
+								style={{ fontFamily: "'Geist', sans-serif" }}
+							>
+								Default Model
+							</label>
+							<div className="space-y-3">
+								{configurableHarnesses.map((harness) => {
+									const models = HARNESS_MODELS[harness.id];
+									const selected = defaultModels[harness.id] ?? models[0].id;
+									return (
+										<div key={harness.id}>
+											<div className="flex items-center gap-2 mb-2">
+												<span className="text-[#666]">{harness.icon}</span>
+												<span
+													className="text-[12px] text-[#666]"
+													style={{ fontFamily: "'Geist', sans-serif" }}
+												>
+													{harness.label}
+												</span>
+											</div>
+											<div className="flex gap-1.5 flex-wrap">
+												{models.map((model) => {
+													const isSelected = selected === model.id;
+													return (
+														<button
+															key={model.id}
+															onClick={() => setDefaultModel(harness.id, model.id)}
+															className={`px-3 py-1.5 rounded-md text-[12px] transition-colors cursor-pointer border ${
+																isSelected
+																	? "bg-[#2a2b2e] border-[#555] text-white"
+																	: "bg-transparent border-[#333] text-[#777] hover:border-[#444] hover:text-[#aaa]"
+															}`}
+															style={{ fontFamily: "'Geist', sans-serif" }}
+														>
+															{model.label}
+														</button>
+													);
+												})}
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						</div>
+
+						{/* Divider */}
+						<div className="border-t border-[#2a2b2e]" />
+
 						{/* Groq API Key */}
 						<div>
 							<label
@@ -73,10 +140,6 @@ export function SettingsModal({ rpc, onClose }: Props) {
 									if (e.key === "Enter") handleSave();
 								}}
 							/>
-							<p className="text-[11px] text-[#555] mt-1.5">
-								For upcoming Groq-powered features. Get your key at{" "}
-								<span className="text-[#777]">console.groq.com</span>
-							</p>
 						</div>
 					</div>
 				)}

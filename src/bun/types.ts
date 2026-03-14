@@ -40,6 +40,7 @@ export type QueryResult = {
 
 export type AppSettings = {
 	groqApiKey?: string;
+	defaultModels?: Record<string, string>;
 };
 
 export type ContextUsage = {

@@ -1,8 +1,31 @@
 import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { join } from "path";
 import { homedir } from "os";
+import { readFileSync } from "fs";
 import type { StreamMessage, PermissionRequest, ContextUsage } from "./types";
 import { updateThread, getThread, saveMessages, loadMessages, saveContextUsage } from "./thread-store";
+
+function loadMcpServers(): Record<string, Record<string, unknown>> {
+	const configPaths = [
+		join(homedir(), ".claude", "claude_desktop_config.json"),
+		join(homedir(), ".claude", "settings.json"),
+		join(homedir(), ".claude", "settings.local.json"),
+	];
+	const merged: Record<string, Record<string, unknown>> = {};
+	for (const configPath of configPaths) {
+		try {
+			const raw = readFileSync(configPath, "utf-8");
+			const config = JSON.parse(raw);
+			const servers = config.mcpServers ?? config.mcp_servers;
+			if (servers && typeof servers === "object") {
+				Object.assign(merged, servers);
+			}
+		} catch {
+			// File doesn't exist or isn't valid JSON — skip
+		}
+	}
+	return merged;
+}
 
 type SendToWebview = {
 	onStreamChunk: (data: { threadId: string; message: StreamMessage }) => void;
@@ -79,11 +102,14 @@ function buildClaudeOpts(cwd: string, threadId: string, resumeSessionId?: string
 
 	const claudePath = join(homedir(), ".local", "bin", "claude");
 
+	const mcpServers = loadMcpServers();
+
 	const opts: Record<string, unknown> = {
 		cwd,
 		env: cleanEnv,
 		pathToClaudeCodeExecutable: claudePath,
 		includePartialMessages: true,
+		...(Object.keys(mcpServers).length > 0 && { mcpServers }),
 		canUseTool: async (
 			toolName: string,
 			toolInput: Record<string, unknown>,

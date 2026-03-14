@@ -165,8 +165,9 @@ const ThreadItem = memo(function ThreadItem({
 				/>
 			) : (
 				<span
-					className="text-[13px] text-[#ccc] truncate flex-1 min-w-0"
+					className="text-[13px] text-[#ccc] truncate flex-1 min-w-0 cursor-text"
 					style={{ fontFamily: "'Geist Mono', monospace" }}
+					onDoubleClick={(e) => onStartRename(thread, e)}
 				>
 					{thread.title}
 				</span>

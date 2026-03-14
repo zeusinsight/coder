@@ -7,10 +7,12 @@
 		"dev": "electrobun dev --watch",
 		"dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
 		"hmr": "vite --port 5173",
-		"build:canary": "vite build && electrobun build --env=canary"
+		"build:canary": "vite build && electrobun build --env=canary",
+		"build:prod": "vite build && electrobun build --env=stable"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.71",
+		"@tanstack/react-virtual": "^3.13.22",
 		"@xterm/addon-fit": "^0.11.0",
 		"@xterm/addon-web-links": "^0.12.0",
 		"@xterm/xterm": "^6.0.0",

@@ -26,6 +26,9 @@ const rpc = Electroview.defineRPC<CoderRPC>({
 
 const electroview = new Electroview({ rpc });
 
+// Disable default browser context menu (inspect element, refresh, etc.)
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+
 // Intercept all link clicks and open them in the default browser
 document.addEventListener("click", (e) => {
 	const anchor = (e.target as HTMLElement).closest("a");
